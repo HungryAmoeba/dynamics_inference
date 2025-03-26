@@ -1,0 +1,5 @@
+defaults:
+  - dynamics: swarmalator
+  - engine: ode_solver
+  - visualizer: matplotlib
+

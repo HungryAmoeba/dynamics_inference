@@ -172,3 +172,11 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+
+.DS_Store
+
+*.mp4
+from_Chenyi/
+
+outputs/
