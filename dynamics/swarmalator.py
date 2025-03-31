@@ -187,3 +187,18 @@ class Swarmalator(DynamicalSystem):
             pos_deriv[i] /= N - 1
 
         return np.concatenate([pos_deriv, ori_deriv])
+
+    def unwrap_state(self, state):
+        """
+        Unwrap the state into positions and orientations.
+        Args:
+            - state: The current state array (flattened)
+        Returns:
+            - positions: Array of shape (N, D) for positions
+            - orientations: Array of shape (N, D) for orientations
+        """
+        pos = state[:, :self.N * self.dim].reshape(-1, self.N, self.dim)
+        ori = state[:, self.N * self.dim:].reshape(-1, self.N, self.dim)
+        return pos, ori
+    
+        

@@ -3,7 +3,7 @@ import numpy as np
 from matplotlib.animation import FuncAnimation
 from mpl_toolkits.mplot3d import Axes3D  # For 3D plotting
 
-def animate_particle_motion(pos, ori=None, interval=50, title="Swarmalator Motion"):
+def animate_particle_motion(pos, ori=None, interval=50, **kwargs):
     """
     Animate particle positions with optional orientation arrows.
     
@@ -97,7 +97,10 @@ def animate_particle_motion(pos, ori=None, interval=50, title="Swarmalator Motio
                 # Update 2D quivers in place
                 quivers.set_offsets(pos[frame])
                 quivers.set_UVC(ori[frame,:,0]*arrow_scale, ori[frame,:,1]*arrow_scale)
-        
+        if 'title' in kwargs:
+            title = kwargs['title']
+        else:
+            title = "Particle Motion"
         ax.set_title(f"{title}\nFrame {frame}/{T}")
         return scat,
 

@@ -3,3 +3,4 @@ defaults:
   - engine: ode_solver
   - visualizer: matplotlib
 
+output_folder: ./animation_outputs  # Directory to save output files

@@ -3,6 +3,7 @@ import numpy as np
 import sys
 from mathutils import Vector
 from pathlib import Path
+import datetime
 
 def log(message):
     """Write debug output to file"""
@@ -19,6 +20,21 @@ def load_data():
         log("ERROR: No data file specified after --")
         sys.exit(1)
 
+def load_save_path():
+    """Find the save path for the rendered animation if specified.
+    If not specified, return None.
+    """
+    """Find the save path for the rendered animation if specified after --"""
+    try:
+        sep_index = sys.argv.index("--")
+        if sep_index + 2 < len(sys.argv):
+            return Path(sys.argv[sep_index + 2])
+        else:
+            return None
+    except (ValueError, IndexError):
+        log("No save path specified for the rendered animation.")
+        return None
+    
     
 def setup_scene():
     """Clear existing data and setup a new scene"""
@@ -124,6 +140,18 @@ def main():
         bpy.context.scene.render.fps = 24
         bpy.context.scene.render.image_settings.file_format = 'FFMPEG'
         bpy.context.scene.render.ffmpeg.format = 'MPEG4'
+
+        # specify where to save the rendered animation
+        save_path = load_save_path()
+        if save_path is None:
+            # default save path is to ./animation_outputs with a timestamp
+            base_dir = Path.home() / "animation_outputs"
+            base_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            save_path = base_dir / f"blender_animation.blend"
+        log(f"Rendering animation to: {save_path}")
+
+        bpy.context.scene.render.filepath = save_path
         
         print("Animation ready! Render from Blender's Render menu.")
     except Exception as e:

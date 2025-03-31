@@ -1,0 +1,8 @@
+type: 'gravitation'
+dimension: 3
+num_particles: 100 
+G: 1 
+initial_conditions:
+  position_range: [-10, 10]  # Initial positions drawn from a box [-10,10] in each dimension
+  velocity_range: [-1, 1]  # Initial velocities drawn from a box [-1,1] in each dimension
+rng_key: 0  # Random number generator seed for reproducibility

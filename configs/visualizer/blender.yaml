@@ -1,0 +1,3 @@
+method: blender
+display_window: false
+output_dir: ./animation_outputs  # Directory to save output files

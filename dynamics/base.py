@@ -23,4 +23,11 @@ class DynamicalSystem(ABC):
             Return the current state of the system.
             """
             pass
+
+        @abstractmethod
+        def unwrap_state(self, state):
+            """"
+            Unwrap the state into positions and orientations."
+            """
+            pass
         

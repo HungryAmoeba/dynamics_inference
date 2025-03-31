@@ -1,0 +1,7 @@
+method: matplotlib
+interval: .1
+grid:
+  enabled: true
+  color: "#e0e0e0"
+  linestyle: "--"
+  linewidth: 0.5
