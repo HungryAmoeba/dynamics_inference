@@ -8,7 +8,7 @@ class NeuralODEInference(BaseInference):
     A concrete implementation of BaseInference for Neural ODE-based inference.
     """
 
-    def __init__(self, dynamics_type='mlp', hidden_dim=64, hidden_depth=2):
+    def __init__(self, dynamics_type="mlp", hidden_dim=64, hidden_depth=2):
         super().__init__()
         self.dynamics_type = dynamics_type
         self.hidden_dim = hidden_dim
@@ -16,18 +16,18 @@ class NeuralODEInference(BaseInference):
         self.model = self._build_model()
 
     def _build_model(self):
-        import torch.nn as nn
-        from torchdiffeq import odeint
 
         class Dynamics(nn.Module):
             def __init__(self, dynamics_type, hidden_dim, hidden_depth):
                 super().__init__()
-                if dynamics_type == 'mlp':
+                if dynamics_type == "mlp":
                     self.dynamics = self._build_mlp(hidden_dim, hidden_depth)
-                elif dynamics_type == 'linear':
+                elif dynamics_type == "linear":
                     self.dynamics = nn.Linear(3, 3)
                 else:
-                    raise ValueError("Unsupported dynamics_type. Use 'mlp' or 'linear'.")
+                    raise ValueError(
+                        "Unsupported dynamics_type. Use 'mlp' or 'linear'."
+                    )
 
             def forward(self, t, state):
                 return self.dynamics(state)
@@ -45,8 +45,11 @@ class NeuralODEInference(BaseInference):
         # Data preprocessing logic specific to Neural ODE
         pass
 
-    def fit(self, initial_state, times, segment_positions, num_iterations=1000, lr=1e-3):
+    def fit(
+        self, initial_state, times, segment_positions, num_iterations=1000, lr=1e-3
+    ):
         import torch
+
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         for itr in range(num_iterations):
             optimizer.zero_grad()
@@ -56,8 +59,6 @@ class NeuralODEInference(BaseInference):
             optimizer.step()
 
     def simulate(self, initial_state, times):
-        import torch
-        from torchdiffeq import odeint
         return odeint(self.model, initial_state, times, atol=1e-8, rtol=1e-8)
 
     def predict(self, X):

@@ -1,16 +1,16 @@
 import abc
-import numpy as np
 import matplotlib.pyplot as plt
+
 
 class BaseInference(abc.ABC):
     """
-    A base class for inference tasks, providing shared utilities and requiring specific methods 
+    A base class for inference tasks, providing shared utilities and requiring specific methods
     to be implemented by subclasses.
     """
 
     def __init__(self, *args, **kwargs):
         self.models = []
-        self.data_names = kwargs.get('data_names', ['X', 'Y', 'Z'])
+        self.data_names = kwargs.get("data_names", ["X", "Y", "Z"])
 
     @abc.abstractmethod
     def preprocess_data(self, data):
@@ -57,13 +57,19 @@ class BaseInference(abc.ABC):
         Utility function to plot actual vs predicted trajectories.
         """
         fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.plot(actual[:, 0], actual[:, 1], actual[:, 2], label='Actual', color='blue')
-        ax.plot(predicted[:, 0], predicted[:, 1], predicted[:, 2], label='Predicted', color='red', linestyle='dashed')
+        ax = fig.add_subplot(111, projection="3d")
+        ax.plot(actual[:, 0], actual[:, 1], actual[:, 2], label="Actual", color="blue")
+        ax.plot(
+            predicted[:, 0],
+            predicted[:, 1],
+            predicted[:, 2],
+            label="Predicted",
+            color="red",
+            linestyle="dashed",
+        )
         ax.set_title(title)
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
         plt.legend()
         plt.show()
-

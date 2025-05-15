@@ -1,7 +1,8 @@
-from abc import ABC, abstractmethod 
+from abc import ABC, abstractmethod
+
 
 class DynamicalSystem(ABC):
-    @abstractmethod 
+    @abstractmethod
     def initialize(self, config):
         @abstractmethod
         def initialize(self, config):
@@ -26,8 +27,7 @@ class DynamicalSystem(ABC):
 
         @abstractmethod
         def unwrap_state(self, state):
-            """"
+            """ "
             Unwrap the state into positions and orientations."
             """
             pass
-        

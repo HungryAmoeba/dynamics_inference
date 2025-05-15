@@ -1,5 +1,6 @@
-from diffrax import diffeqsolve, ODETerm, Dopri5, SaveAt, PIDController, Tsit5, Euler
+from diffrax import diffeqsolve, ODETerm, SaveAt, PIDController, Tsit5
 import jax.numpy as jnp
+
 
 class ODEEngine:
     def __init__(self, system, config):
@@ -13,21 +14,31 @@ class ODEEngine:
         # so that we can access the compute_derivatives method
 
         vector_field = lambda t, y, args: self.system.compute_derivatives(t, y, args)
-        #vector_field = lambda t, y, args: -y
+        # vector_field = lambda t, y, args: -y
         term = ODETerm(vector_field)
         solver = Tsit5()
-        #saveat = SaveAt(ts=[0., 1., 2., 3.])
+        # saveat = SaveAt(ts=[0., 1., 2., 3.])
         t0 = self.config.time.t0
         t1 = self.config.time.t1
         dt = self.config.time.dt
-        save_t0 = self.config.saveat.t0 if hasattr(self.config.saveat, 't0') else t0
-        save_t1 = self.config.saveat.t1 if hasattr(self.config.saveat, 't1') else t1
-        save_dt = self.config.saveat.dt if hasattr(self.config.saveat, 'dt') else dt
+        save_t0 = self.config.saveat.t0 if hasattr(self.config.saveat, "t0") else t0
+        save_t1 = self.config.saveat.t1 if hasattr(self.config.saveat, "t1") else t1
+        save_dt = self.config.saveat.dt if hasattr(self.config.saveat, "dt") else dt
         saveat = SaveAt(ts=list(jnp.arange(save_t0, save_t1, save_dt)))
 
         y0 = self.system.return_state()  # initial state
 
-        sol = diffeqsolve(term, solver, t0=t0, t1=t1, dt0=dt, y0=y0, saveat=saveat, max_steps = None, stepsize_controller=PIDController(rtol=1e-4, atol=1e-7))
+        sol = diffeqsolve(
+            term,
+            solver,
+            t0=t0,
+            t1=t1,
+            dt0=dt,
+            y0=y0,
+            saveat=saveat,
+            max_steps=None,
+            stepsize_controller=PIDController(rtol=1e-4, atol=1e-7),
+        )
 
         return sol.ys, sol.ts
         # print(sol.ts)  # DeviceArray([0.   , 1.   , 2.   , 3.    ])
@@ -38,7 +49,7 @@ class ODEEngine:
         #     solver = Dopri5()
         # else:
         #     raise ValueError(f"Unknown solver: {self.config.solver}")
-        
+
         # t0 = self.config.time.t0
         # t1 = self.config.time.t1
         # dt = self.config.time.dt
@@ -62,7 +73,7 @@ class ODEEngine:
         This is useful for debugging and understanding the solver's behavior.
         """
         # solve using rk4 for now, ensure normalization of orientations at each step
-        
+
         t0 = self.config.time.t0
         t1 = self.config.time.t1
         dt = self.config.time.dt
@@ -79,7 +90,7 @@ class ODEEngine:
             # update the state using Euler's method
             y0 = y0 + dt * dy
             # normalize the orientations to lie on the unit sphere
-            #y0[self.system.N * self.system.dim:] /= jnp.linalg.norm(y0[self.system.N * self.system.dim:])
+            # y0[self.system.N * self.system.dim:] /= jnp.linalg.norm(y0[self.system.N * self.system.dim:])
 
             # # ensure that the orientations are normalized
             # orientations = y0[self.system.N * self.system.dim:]
@@ -91,11 +102,11 @@ class ODEEngine:
             # check if y0 has any NaN values
             if jnp.isnan(y0).any():
                 print(f"NaN detected in state at time {t}")
-                import pdb; pdb.set_trace()
+                import pdb
+
+                pdb.set_trace()
 
             t += dt
-            
-
 
         # convert to jnp arrays
         ys = jnp.array(ys)

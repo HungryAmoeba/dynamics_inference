@@ -1,16 +1,15 @@
 import abc
-import numpy as np
-import matplotlib.pyplot as plt
+
 
 class BaseInference(abc.ABC):
     """
-    A base class for inference tasks, providing shared utilities and requiring specific methods 
+    A base class for inference tasks, providing shared utilities and requiring specific methods
     to be implemented by subclasses.
     """
 
     def __init__(self, *args, **kwargs):
         self.models = []
-        self.data_names = kwargs.get('data_names', ['X', 'Y', 'Z'])
+        self.data_names = kwargs.get("data_names", ["X", "Y", "Z"])
 
     @abc.abstractmethod
     def preprocess_data(self, data):
