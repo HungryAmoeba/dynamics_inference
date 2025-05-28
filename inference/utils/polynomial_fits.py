@@ -108,14 +108,14 @@ def orth_poly_mc_fast(data_locations, N):
     # 1) Vandermonde in monomial basis: V[i,j] = x[i]**j
     V = jnp.vander(x, N + 1, increasing=True)  # shape (K, N+1)
 
-    # 2) Incorporate weight w = 1/K by scaling rows by 1/√K
+    # 2) Incorporate weight w = 1/K by scaling rows by 1/sqrt K
     Vw = V / jnp.sqrt(K)
 
     # 3) Thin QR: Vw = Q @ R,    Q^T Q = I
     Q, R = jnp.linalg.qr(Vw, mode="reduced")  # Q: (K, N+1), R: (N+1, N+1)
 
-    # 4a) To get evaluations p_k(x_i) satisfying (1/K) ∑ p_m p_n = δ_mn:
-    #    rescale Q by √K:
+    # 4a) To get evaluations p_k(x_i) satisfying (1/K) sum p_m p_n = \delta_mn:
+    #    rescale Q by sqrt K:
     P_eval = jnp.sqrt(K) * Q  # shape (K, N+1)
 
     # 4b) To get monomial‐basis coeffs of each p_k, solve R @ a_k = e_k:
