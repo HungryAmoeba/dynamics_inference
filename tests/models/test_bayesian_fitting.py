@@ -1,5 +1,5 @@
-from src.models.bayesian_fitting import SparseBayesianMC
-from src.data.toy_examples import simple_2d_sde_dataset
+from src_depreciated.models.bayesian_fitting import SparseBayesianMC
+from src_depreciated.data.toy_examples import simple_2d_sde_dataset
 
 
 def test_sparse_bayesian_2d():

@@ -17,7 +17,7 @@ import itertools
 
 import sympy as sp
 
-from ..utils.polynomial_fits import orth_poly_mc_fast
+from gadynamics.inference.utils.polynomial_fits import orth_poly_mc_fast
 
 # from ..utils import AxesArray
 # from ..utils import comprehend_axes

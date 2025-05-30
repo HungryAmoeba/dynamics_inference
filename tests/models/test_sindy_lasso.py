@@ -1,5 +1,5 @@
-from src.models.sindy_lasso import LassoInference
-from src.data.toy_examples import simple_2d_sde_dataset
+from src_depreciated.models.sindy_lasso import LassoInference
+from src_depreciated.data.toy_examples import simple_2d_sde_dataset
 
 
 def test_sindy_lasso_2d():

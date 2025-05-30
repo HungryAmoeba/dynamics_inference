@@ -12,7 +12,7 @@ class DynamicalSystem(ABC):
             pass
 
         @abstractmethod
-        def derivative(self, state):
+        def compute_derivatives(self, state):
             """
             Compute the derivative of the system at the given state.
             """

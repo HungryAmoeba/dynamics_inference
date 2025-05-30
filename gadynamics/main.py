@@ -3,9 +3,9 @@ from omegaconf import DictConfig
 import jax.numpy as jnp
 from pathlib import Path
 
-from dynamics.system import GetDynamicalSystem
-from simulation.ode_solve_engine import ODEEngine
-from visualizer.visualize_dynamics import visualize_dynamics
+from gadynamics.dynamics.system import GetDynamicalSystem
+from gadynamics.simulation.ode_solve_engine import ODEEngine
+from gadynamics.visualizer.visualize_dynamics import visualize_dynamics
 
 
 def zap_small(arr, tol=1e-6):
@@ -41,17 +41,23 @@ def main(cfg: DictConfig):
 
     engine = ODEEngine(system, cfg.engine.ode_solver)
     ys, ts = engine.run()
+
+    # system.compute_derivatives(0, system.state, 0)
+
     # separate the positions and orientations
     # ys is of shape (T, 2ND) where N is the number of agents and D is the dimension
     pos, ori = system.unwrap_state(
         ys
     )  # Unwrap the state into positions and orientations
-
     visualize_dynamics(cfg.visualizer, pos, ori)
 
     # Save the results
     data_dir = Path(cfg.data_dir_base) / get_save_name(cfg)
     save_results(data_dir, ts, pos, ori)
+    import pdb
+
+    pdb.set_trace()
+    system.print()
 
 
 if __name__ == "__main__":

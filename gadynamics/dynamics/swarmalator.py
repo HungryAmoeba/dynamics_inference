@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 import jax.random as jrandom
-from .base import DynamicalSystem
+from gadynamics.dynamics.base import DynamicalSystem
 
 
 class Swarmalator(DynamicalSystem):

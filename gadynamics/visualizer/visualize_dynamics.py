@@ -1,5 +1,5 @@
-from .matplotlib_visualization import animate_particle_motion
-from .blender_visualization import animate_particle_motion_blender
+from gadynamics.visualizer.matplotlib_visualization import animate_particle_motion
+from gadynamics.visualizer.blender_visualization import animate_particle_motion_blender
 
 import numpy as np
 import os

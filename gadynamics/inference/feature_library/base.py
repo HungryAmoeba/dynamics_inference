@@ -15,10 +15,10 @@ from scipy import sparse
 from sklearn.base import TransformerMixin
 from sklearn.utils.validation import check_is_fitted
 
-from ..utils import AxesArray
-from ..utils import comprehend_axes
-from ..utils import validate_no_reshape
-from ..utils import wrap_axes
+from gadynamics.inference.utils import AxesArray
+from gadynamics.inference.utils import comprehend_axes
+from gadynamics.inference.utils import validate_no_reshape
+from gadynamics.inference.utils import wrap_axes
 
 
 class BaseFeatureLibrary(TransformerMixin):

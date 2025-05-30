@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import jax.random as jrandom
 import jax
-from .base import DynamicalSystem
+from gadynamics.dynamics.base import DynamicalSystem
 
 
 class GravitationalSystem(DynamicalSystem):
