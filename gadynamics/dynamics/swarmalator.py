@@ -229,3 +229,61 @@ class Swarmalator(DynamicalSystem):
         pos = state[:, : self.N * self.dim].reshape(-1, self.N, self.dim)
         ori = state[:, self.N * self.dim :].reshape(-1, self.N, self.dim)
         return pos, ori
+
+    def compute_derivatives_unreshaped_naive(self, state):
+        N = self.N
+        alpha, beta, gamma, J, R, epsilon_a, epsilon_r = (
+            self.alpha,
+            self.beta,
+            self.gamma,
+            self.J,
+            self.R,
+            self.epsilon_a,
+            self.epsilon_r,
+        )
+
+        # Extract positions and orientations
+        positions = state[:N, :]  # Shape: (N, D)
+        orientations = state[N:, :]  # Shape: (N, D)
+
+        # Pairwise differences and distances
+        pos_diffs = positions[:, None, :] - positions[None, :, :]
+        distances = jnp.linalg.norm(pos_diffs, axis=-1)
+
+        # convert it to numpy arrays
+        import numpy as np
+
+        pos = np.array(positions)
+        ori = np.array(orientations)
+        pos_diffs = np.array(pos_diffs)
+        distances = np.array(distances)
+
+        pos_deriv = np.zeros_like(pos)
+        ori_deriv = np.zeros_like(ori)
+
+        for i in range(N):
+            Ni = np.sum(distances[i, :] < R) - 1
+            Nr = N - Ni - 1
+            for j in range(N):
+                if i == j:
+                    continue
+                dot_oris = np.dot(ori[i], ori[j])
+                if distances[i, j] <= R:
+                    Kij = epsilon_a / Ni
+                else:
+                    Kij = -epsilon_r / Nr
+
+                displacement_ji = pos[j] - pos[i]
+                norm_alpha = distances[j, i] ** alpha
+                norm_beta = distances[j, i] ** beta
+                norm_gamma = distances[j, i] ** gamma
+
+                pos_deriv[i] += (
+                    1 + J * dot_oris
+                ) * displacement_ji / norm_alpha - displacement_ji / norm_beta
+                ori_deriv[i] += Kij * ((ori[j] - dot_oris * ori[i]) / norm_gamma)
+
+            # normalize the position derivative
+            pos_deriv[i] /= N - 1
+
+        return np.concatenate([pos_deriv, ori_deriv])

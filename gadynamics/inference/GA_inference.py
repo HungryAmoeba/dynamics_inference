@@ -11,7 +11,7 @@ from scipy.signal import savgol_filter
 # import optax
 from jax.experimental.ode import odeint
 import sympy as sp
-
+from sympy import Float, Number
 from functools import partial
 import jax
 import jax.numpy as jnp
@@ -24,6 +24,10 @@ from scipy.signal import savgol_filter  # or wherever you import this
 
 from typing import Sequence
 from itertools import product
+
+
+def round_expr(expr, num_digits):
+    return expr.xreplace({n: round(n, num_digits) for n in expr.atoms(Number)})
 
 
 def _zip_like_sequence(x, t):
@@ -274,39 +278,52 @@ class GA_DynamicsInference(BaseEstimator):
         """
         return self.feature_library.get_feature_names()
 
-    def print(self, precision=3, **kwargs):
-        """
-        Print the parameters of the model.
-        """
-        # from sympy import init_printing
-        # init_printing()
-
+    def get_simplified_expressions(self, precision=3, significance_threshold=0.05):
         feats = self.feature_library.get_feature_names_symbolic()
         W = jax.device_get(self.params["W"])
-        significance_threshold = kwargs.get("significance_threshold", 0.05)
         W = jnp.where(jnp.abs(W) < significance_threshold, 0.0, W)
+        W = jnp.round(W, decimals=precision)
 
-        if self.coupling_method == "fixed":
-            K_fixed = self.coupling_matrix
-            print(f"Fixed coupling matrix: {K_fixed}")
-        elif self.coupling_method == "gaussian":
-            K_fixed = None
-            print(
-                f"Gaussian coupling with alpha: {jnp.exp(self.params['log_alpha'])}, eps: {jnp.exp(self.params['log_eps'])}"
-            )
-
-        print(f"Learned f_g expressions")
+        exprs = []
         for g in range(self.Gn + 1):
-            _ = [feats[m] for m in range(self.feature_library.n_output_features_)]
             expr = sum(
-                [
-                    float(W[g, m]) * feats[m]
-                    for m in range(self.feature_library.n_output_features_)
-                ]
+                sp.Float(float(W[g, m])) * feats[m]
+                for m in range(self.feature_library.n_output_features_)
             )
             expr = sp.simplify(expr)
-            print(f"f_{g} = {expr}")
-            sp.pprint(expr)
+            exprs.append(round_expr(expr, precision))
+        return exprs
+
+    def get_coupling_info(self):
+        if self.coupling_method == "fixed":
+            return f"Fixed coupling matrix:\n{self.coupling_matrix}\n\n"
+        elif self.coupling_method == "gaussian":
+            return (
+                f"Gaussian coupling with alpha: {jnp.exp(self.params['log_alpha'])}, "
+                f"eps: {jnp.exp(self.params['log_eps'])}\n\n"
+            )
+        return ""
+
+    def print(self, precision=3, **kwargs):
+        significance_threshold = kwargs.get("significance_threshold", 0.05)
+        exprs = self.get_simplified_expressions(precision, significance_threshold)
+
+        print(self.get_coupling_info())
+        print("Learned f_g expressions:")
+        for g, expr in enumerate(exprs):
+            print(f"f_{g} =")
+            sp.pprint(expr, use_unicode=True)
+            print()
+
+    def generate_latex_eq(self, output_file, precision=3, **kwargs):
+        significance_threshold = kwargs.get("significance_threshold", 0.05)
+        exprs = self.get_simplified_expressions(precision, significance_threshold)
+        with open(output_file, "w") as f:
+            f.write(self.get_coupling_info())
+            f.write("Learned $f_g$ expressions:\n\n")
+
+            for g, expr in enumerate(exprs):
+                f.write(f"$f_{{{g}}} = {sp.latex(expr)}$\n\n")
 
     def simulate(self, x0, t, u=None, integrator="odeint", **kwargs):
         """

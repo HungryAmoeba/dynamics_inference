@@ -1,6 +1,7 @@
 from gadynamics.dynamics.gravitation import GravitationalSystem
 from gadynamics.dynamics.swarmalator import Swarmalator
 from gadynamics.dynamics.interacting_GA import InteractingGA
+from gadynamics.dynamics.swarmalator_breathing import SwarmalatorBreathing
 
 
 def GetDynamicalSystem(config):
@@ -15,6 +16,8 @@ def GetDynamicalSystem(config):
     """
     if config.type == "swarmalator":
         system = Swarmalator()
+    elif config.type == "swarmalator_breathing":
+        system = SwarmalatorBreathing()
     elif config.type == "gravitation":
         system = GravitationalSystem()
     elif config.type == "ga_general":

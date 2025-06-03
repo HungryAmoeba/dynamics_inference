@@ -335,8 +335,8 @@ class InteractingGA(DynamicalSystem):
                 raise ValueError(f"Unknown equation_type: {self.equation_type}")
 
             self.feature_library.fit(self.Gn + 1)  # fit to number of grades
-            minval = -5
-            maxval = 5
+            minval = -1
+            maxval = 1
             num_features = self.feature_library.n_output_features_
             F = jrandom.randint(
                 jrandom.PRNGKey(self.seed), (num_features, self.Gn + 1), minval, maxval
@@ -360,7 +360,7 @@ class InteractingGA(DynamicalSystem):
             raise ValueError(f"Unknown f_type: {self.f_type}")
 
         # Initialize particle states
-        scale = 10
+        scale = 1
         random_initial_state = (
             jrandom.normal(jrandom.PRNGKey(self.seed + 4), (self.N, len(self.g_of_d)))
             * scale

@@ -1,0 +1,3 @@
+[submodule "overleaf"]
+	path = overleaf
+	url = git@github.com:HungryAmoeba/ga_inference.git
