@@ -228,7 +228,7 @@ class Swarmalator(DynamicalSystem):
         """
         pos = state[:, : self.N * self.dim].reshape(-1, self.N, self.dim)
         ori = state[:, self.N * self.dim :].reshape(-1, self.N, self.dim)
-        return pos, ori
+        return pos, ori, None
 
     def compute_derivatives_unreshaped_naive(self, state):
         N = self.N

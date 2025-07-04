@@ -42,7 +42,7 @@ class GA_DynamicsInference(BaseEstimator):
     def __init__(
         self,
         Gn: int = 3,
-        coupling_method: str = "gaussian",
+        coupling_method: str = "dense",
         coupling_matrix: Optional[jnp.ndarray] = None,
         optimizer: str = "adam",
         feature_library=None,  # type: BaseFeatureLibrary
@@ -71,6 +71,7 @@ class GA_DynamicsInference(BaseEstimator):
         self.coupling_matrix = coupling_matrix
         if coupling_method == "fixed" and coupling_matrix is None:
             raise ValueError("Must provide coupling_matrix for fixed mode.")
+
         if coupling_method == "gaussian":
             # log‐alpha, log‐eps initial guesses
             self.params = {
@@ -106,6 +107,8 @@ class GA_DynamicsInference(BaseEstimator):
             K = jnp.broadcast_to(K_fixed, (T, N, N))
         elif self.coupling_method == "learn_fixed":
             K = jnp.broadcast_to(params["K"], (T, N, N))
+        elif self.coupling_method == "dense":
+            K = jnp.ones((T, N, N))
         else:  # gaussian
             α = jnp.exp(params["log_alpha"])
             ε = jnp.exp(params["log_eps"])
@@ -152,11 +155,22 @@ class GA_DynamicsInference(BaseEstimator):
         # process shapes
         T, N, D = x.shape
         diffs = x[:, :, None, :] - x[:, None, :, :]  # (T,N,N,D)
+        # give an option to normalize the diffs along the last axis
+        # norm_diff = jnp.linalg.norm(diffs_unnorm, axis = -1) + 1e-8
+        # diffs = diffs_unnorm / norm_diff[:, :, :, None]
 
         # build dists (T,N,N,G+1)
         dists = jnp.stack(
             [
                 jnp.linalg.norm(diffs[..., idxs], axis=-1)
+                for g, idxs in sorted(self.g_to_idxs.items())
+            ],
+            axis=-1,
+        )
+
+        diffs = jnp.concat(
+            [
+                diffs[..., idxs] * dists[..., g][..., None]
                 for g, idxs in sorted(self.g_to_idxs.items())
             ],
             axis=-1,
@@ -233,6 +247,14 @@ class GA_DynamicsInference(BaseEstimator):
             ],
             axis=-1,
         )
+        diffs = jnp.concat(
+            [
+                diffs[..., idxs] * dists[..., g][..., None]
+                for g, idxs in sorted(self.g_to_idxs.items())
+            ],
+            axis=-1,
+        )
+
         flat = dists.reshape((T * N * N, self.Gn + 1))
         feats = self.feature_library.transform(flat)
         M = self.feature_library.n_output_features_
@@ -305,7 +327,7 @@ class GA_DynamicsInference(BaseEstimator):
         return ""
 
     def print(self, precision=3, **kwargs):
-        significance_threshold = kwargs.get("significance_threshold", 0.05)
+        significance_threshold = kwargs.get("significance_threshold", 0.001)
         exprs = self.get_simplified_expressions(precision, significance_threshold)
 
         print(self.get_coupling_info())
