@@ -1,88 +1,266 @@
-# Dynamics Inference
+# Dynamo-Infer: Modular Dynamics Simulation and Inference
 
-This repo will hopefully be of use for:
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-1. simulation of interacting dynamical systems
-2. inference of dynamics from (simulated) observational data
+A modular framework for simulating, visualizing, and inferring dynamics of interacting systems. Dynamo-Infer provides a clean, scientific-computing-ready package that makes it easy to:
 
-## Usage
+1. **Define** initial configurations and interaction rules
+2. **Simulate** dynamics using robust ODE solvers
+3. **Visualize** results with multiple backends
+4. **Infer** dynamics from observational data
+5. **Evaluate** and save results
 
-Clone the repo and change directories to it.
+## 🚀 Quick Start
 
-### 1. Install and Activate the Conda Environment
-
-First, create and activate the conda environment:
-
-```bash
-conda env create -f environment.yml
-conda activate sde_inf  # Replace 'my_env' with the actual environment name from environment.yml
-```
-
-### 2. Run `main.py`
-
-Once the environment is set up, you can execute the main script:
+### Installation
 
 ```bash
-python main.py
+# Clone the repository
+git clone https://github.com/yourusername/dynamo-infer.git
+cd dynamo-infer
+
+# Install the package
+pip install -e .
+
+# Or with development dependencies
+pip install -e ".[dev,visualization,notebooks]"
 ```
 
-By default this runs the swamalator and visualizes the results with blender.
+### Basic Usage
 
-### 3. Using Hydra for Configuration
+```python
+import dynamo_infer as di
 
-This project uses [Hydra](https://hydra.cc/) for managing configurations. You can override default arguments as follows:
+# 1. Load configuration
+config = di.load_config("configs/swarmalator.yaml")
+
+# 2. Run the complete pipeline
+results = di.run_full_pipeline(config)
+
+# Or run individual steps:
+system = di.create_system(config.dynamics)
+simulator = di.create_simulator(system, config.simulation)
+trajectory, times = simulator.run()
+```
+
+### Command Line Interface
 
 ```bash
-python main.py param1=value1 param2=value2
+# Run complete pipeline
+dynamo-infer --config configs/swarmalator.yaml --output outputs/
+
+# Run individual steps
+dynamo-simulate --config configs/swarmalator.yaml
+dynamo-infer-dynamics --trajectory outputs/trajectory.npz
+dynamo-evaluate --model outputs/model.pkl --trajectory outputs/trajectory.npz
 ```
 
-To use a different configuration file:
+## 📁 Project Structure
+
+```
+dynamo-infer/
+├── src/dynamo_infer/           # Main package
+│   ├── config/                 # Configuration management
+│   │   └── systems/           # Specific implementations
+│   ├── simulation/             # Simulation engines
+│   ├── visualization/          # Visualization backends
+│   ├── inference/              # Dynamics inference methods
+│   ├── evaluation/             # Performance evaluation
+│   ├── utils/                  # Utility functions
+│   └── workflow.py            # High-level orchestration
+├── configs/                    # Configuration files
+├── examples/                   # Example scripts and notebooks
+├── tests/                      # Test suite
+└── docs/                       # Documentation
+```
+
+## 🔧 Configuration System
+
+Dynamo-Infer uses a hierarchical YAML configuration system:
+
+```yaml
+# config.yaml
+dynamics:
+  type: "swarmalator"
+  n_particles: 100
+  dimension: 3
+  parameters:
+    J: 1.0  # Coupling strength
+    K: 1.0  # Phase coupling
+    seed: 42
+
+simulation:
+  solver: "Tsit5"
+  time:
+    t0: 0.0
+    t1: 10.0
+    dt: 0.01
+  rtol: 1e-4
+  atol: 1e-7
+
+visualization:
+  backend: "matplotlib"
+  animation: true
+  save_path: "outputs/animation.mp4"
+
+inference:
+  method: "GA_inference"
+  feature_library:
+    type: "orthogonal_polynomial"
+    degree: 3
+  epochs: 10000
+  learning_rate: 1e-3
+
+evaluation:
+  metrics: ["mse", "r2", "trajectory"]
+  save_figures: true
+  save_model: true
+```
+
+## 🎯 Supported Systems
+
+### Dynamical Systems
+- **Swarmalators**: High-dimensional swarming with phase dynamics
+- **Gravitational**: N-body gravitational interactions
+- **Geometric Algebra**: General interacting systems using geometric algebra
+- **Custom**: Easy extension for new systems
+
+### Simulation Methods
+- **Diffrax**: Modern JAX-based ODE solvers (Tsit5, Dopri5, etc.)
+- **Adaptive stepping**: Automatic error control
+- **GPU acceleration**: JAX-native computations
+
+### Visualization Backends
+- **Matplotlib**: Static plots and basic animations
+- **Plotly**: Interactive 3D visualizations
+- **Blender**: High-quality 3D renderings and animations
+- **Polyscope**: Real-time 3D visualization
+
+### Inference Methods
+- **Geometric Algebra Inference**: Discover dynamics using GA representations
+- **SINDy**: Sparse identification of nonlinear dynamics
+- **Neural ODEs**: Deep learning approaches
+- **Custom**: Extensible framework for new methods
+
+## 📚 Examples
+
+### Example 1: Swarmalator Simulation
+
+```python
+import dynamo_infer as di
+
+# Create configuration
+config = di.Config(
+    dynamics=di.DynamicsConfig(
+        type="swarmalator",
+        n_particles=50,
+        dimension=3,
+        parameters={"J": 1.0, "K": 1.0}
+    ),
+    simulation=di.SimulationConfig(
+        time=di.TimeConfig(t0=0, t1=10, dt=0.01)
+    )
+)
+
+# Run simulation
+system = di.create_system(config.dynamics)
+simulator = di.create_simulator(system, config.simulation)
+trajectory, times = simulator.run()
+
+print(f"Simulated {trajectory.shape[0]} timesteps")
+```
+
+### Example 2: Complete Pipeline with Inference
+
+```python
+# Load configuration with all steps enabled
+config = di.load_config("configs/complete_pipeline.yaml")
+
+# Run everything
+results = di.run_full_pipeline(
+    config,
+    output_dir="outputs/experiment_1",
+    verbose=True
+)
+
+# Access results
+trajectory = results["trajectory"]
+model = results["model"]
+evaluation = results["evaluation"]
+
+print(f"MSE: {evaluation['metrics']['mse']:.6f}")
+```
+
+### Example 3: Custom System
+
+```python
+from dynamo_infer.dynamics.base import DynamicalSystem
+
+class CustomOscillator(DynamicalSystem):
+    def initialize(self, config):
+        # Setup your system
+        pass
+        
+    def compute_derivatives(self, t, state, args):
+        # Define dynamics
+        return derivatives
+
+# Register your system
+di.register_system("custom_oscillator", CustomOscillator)
+
+# Use it in configs
+config = di.DynamicsConfig(type="custom_oscillator", ...)
+```
+
+## 🧪 Running Tests
 
 ```bash
-python main.py --config-name=my_config
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=dynamo_infer
+
+# Run specific test categories
+pytest tests/test_dynamics.py
+pytest tests/test_inference.py
 ```
 
-For hierarchical overrides:
+## 📖 Documentation
 
-```bash
-python main.py +new_param=value
-```
+- **[API Reference](docs/api/)**: Complete API documentation
+- **[User Guide](docs/guide/)**: Step-by-step tutorials
+- **[Examples](examples/)**: Jupyter notebooks and scripts
+- **[Developer Guide](docs/dev/)**: Contributing and extending
 
-### 4. Example Run
+## 🤝 Contributing
 
-```bash
-python main.py dynamics=gravitation
-```
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-I'll write some documentation once the functionality of the repo has been fleshed out. 
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-### 5. Advanced visualization
+## 📄 License
 
-Install [Blender](https://www.blender.org) for visualization.
-Download assets into a folder ./assets
-I'll write documentation for this once its a bit more complete!
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Additional Information
+## 🙏 Acknowledgments
 
-- Ensure all dependencies are installed before running.
-- Refer to `config.yaml` for available parameters.
-- For debugging, use `HYDRA_FULL_ERROR=1` to get detailed error messages.
+- Based on research from:
+  - Yadav, A., et al. (2024): "Exotic swarming dynamics of high-dimensional swarmalators." Physical Review E
+  - SINDy framework by Brunton et al.
+  - JAX ecosystem for high-performance computing
 
-```bash
-HYDRA_FULL_ERROR=1 python main.py
-```
+## 📞 Contact
 
-## Dynamics
+- **Issues**: [GitHub Issues](https://github.com/yourusername/dynamo-infer/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/dynamo-infer/discussions)
+- **Email**: your.email@example.com
 
-The dynamics implemented as of 3/31: 
+---
 
-High dimensional swarmalator from:
-Yadav, A., J, K., Chandrasekar, V. K., Zou, W., Kurths, J., Senthilkumar, D. V. (2024): Exotic swarming dynamics of high-dimensional swarmalators. - Physical Review E, 109, 4, 044212.
-
-Gravity 
-
-## Dynamics inference methods
-
-TODO
-
-
+**Built with ❤️ for the scientific computing community**

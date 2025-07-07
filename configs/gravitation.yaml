@@ -1,0 +1,46 @@
+# Gravitational N-body system configuration
+dynamics:
+  type: "gravitation"
+  n_particles: 10
+  dimension: 3
+  parameters:
+    G: 1.0              # Gravitational constant
+    mass_range: [0.5, 2.0]  # Mass range for particles
+    position_scale: 10.0     # Initial position scale
+    velocity_scale: 0.1      # Initial velocity scale
+    seed: 42
+    softening: 0.01     # Softening parameter to avoid singularities
+
+simulation:
+  solver: "Tsit5"
+  time:
+    t0: 0.0
+    t1: 50.0
+    dt: 0.1
+  rtol: 1e-6
+  atol: 1e-9
+
+visualization:
+  backend: "plotly"
+  animation: true
+  save_path: "outputs/gravitation_animation.html"
+  show_trajectories: true
+  parameters:
+    marker_size: 8
+    trail_length: 100
+
+inference:
+  method: "GA_inference" 
+  feature_library:
+    type: "polynomial"
+    degree: 2
+  epochs: 10000
+  learning_rate: 1e-3
+  sparsity: 0.05
+
+evaluation:
+  metrics: ["mse", "energy_conservation"]
+  save_figures: true
+  save_model: true
+
+output_dir: "./outputs"
