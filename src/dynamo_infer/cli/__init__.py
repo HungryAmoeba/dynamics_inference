@@ -1,6 +1,5 @@
 """Command line interface for dynamo-infer."""
 
-from .main import main
-from .commands import simulate, infer, evaluate
+from .main import run
 
-__all__ = ["main", "simulate", "infer", "evaluate"]
+__all__ = ["run"]

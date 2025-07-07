@@ -17,11 +17,17 @@ console = Console()
 
 
 @app.command()
-def main(
+def run(
     config: Path = typer.Argument(..., help="Configuration file path"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory"),
-    verbose: bool = typer.Option(True, "--verbose/--quiet", "-v/-q", help="Verbose output"),
-    save_intermediate: bool = typer.Option(True, "--save/--no-save", help="Save intermediate results"),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Output directory"
+    ),
+    verbose: bool = typer.Option(
+        True, "--verbose/--quiet", "-v/-q", help="Verbose output"
+    ),
+    save_intermediate: bool = typer.Option(
+        True, "--save/--no-save", help="Save intermediate results"
+    ),
 ):
     """Run the complete dynamo-infer pipeline."""
     try:
@@ -31,11 +37,13 @@ def main(
             verbose=verbose,
             save_intermediate=save_intermediate,
         )
-        
+
         if verbose:
             console.print(f"[green]✅ Pipeline completed successfully![/green]")
-            console.print(f"Results available in: {results.get('output_dir', 'outputs/')}")
-            
+            console.print(
+                f"Results available in: {results.get('output_dir', 'outputs/')}"
+            )
+
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")
         raise typer.Exit(1)
