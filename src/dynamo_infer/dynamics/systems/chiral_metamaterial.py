@@ -7,11 +7,6 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import Normalize
 
-import sys
-
-sys.path.append("/Users/charlesxu/Documents/MIT/geometric algebra/metamaterial")
-from visualizer.temporal_graph_matplotlib import animate_temporal_graph
-
 
 class ChiralMetamaterial:
     def __init__(
