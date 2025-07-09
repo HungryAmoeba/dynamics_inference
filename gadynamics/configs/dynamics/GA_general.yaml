@@ -1,8 +1,0 @@
-type: 'ga_general'
-Gn: 3
-N: 50 
-equation_type: 'random'
-seed: 0 
-coupling_method: 'gaussian'
-poly_degree: 3
-scale: 10
