@@ -1,0 +1,61 @@
+# Swarmalator system configuration
+dynamics:
+  type: "swarmalator"
+  n_particles: 100
+  dimension: 3
+  parameters:
+    # Physics parameters (matching gadynamics implementation)
+    alpha: 1.0              # Exponent for spatial attraction
+    beta: 3.0               # Exponent for spatial repulsion  
+    gamma: 1.0              # Exponent for phase coupling
+    J: 0.2                  # Phase attraction parameter, between -1 and 1
+    R: 1.4                  # Vision radius, between 0 and 2
+    epsilon_a: 0.5          # Attractive phase coupling strength
+    epsilon_r: 0.5          # Repulsive phase coupling strength
+    noise_strength: 0.0     # Noise strength (0 for deterministic)
+    seed: 42
+  initial_conditions:
+    position_range: [-1.0, 1.0]  # Initial positions drawn from a box [-1,1] in each dimension
+
+simulation:
+  solver: "Tsit5"
+  time:
+    t0: 0.0
+    t1: 10.0
+    dt: 0.01
+  saveat:
+    # Use default: save at every simulation timestep
+  rtol: 1e-4
+  atol: 1e-7
+
+visualization:
+  backend: "matplotlib"
+  animation: true
+  save_path: "outputs/swarmalator_animation.mp4"
+  fps: 30
+  quality: "high"
+  show_trajectories: false
+  parameters:
+    figsize: [10, 8]
+    dpi: 150
+
+# inference:
+#   method: "GA_inference"
+#   feature_library:
+#     type: "orthogonal_polynomial"
+#     degree: 3
+#   optimizer: "adam"
+#   learning_rate: 1e-3
+#   epochs: 5000
+#   sparsity: 0.01
+#   coupling_method: "dense"
+#   differentiation_method: "savgol"
+
+# evaluation:
+#   metrics: ["mse", "r2", "trajectory"]
+#   save_figures: true
+#   save_model: true
+#   save_results: true
+#   comparison_time_horizon: 5.0  # Compare over 5 time units
+
+output_dir: "./outputs"
