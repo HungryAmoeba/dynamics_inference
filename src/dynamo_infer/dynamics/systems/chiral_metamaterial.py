@@ -3,68 +3,159 @@ import jax.numpy as jnp
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
+from typing import Tuple, Dict, Any, List, Optional, Callable
 
 from matplotlib.animation import FuncAnimation
 from matplotlib.colors import Normalize
 
+from ..base import DynamicalSystem
+from ...config.schemas import DynamicsConfig
 
-class ChiralMetamaterial:
-    def __init__(
-        self,
-        graph,  # networkx.Graph with integer nodes 0…N-1
-        pos,  # array (N, D) of initial positions
-        D=2,  # embedding dimension
-        L=1.0,  # nominal bar length
-        k_e=1e4,  # bar‐spring stiffness
-        r=0.2,  # winding radius
-        k_r=10,  # rotational spring stiffness
-        gamma=1,  # translational damping
-        gamma_t=0.1,  # rotational damping
-        dt=1e-4,  # timestep
-        forcing_fn=None,  # NEW: function(t, state, F_int, T_int) → (F_ext, T_ext) adds forces
-        vel_fn=None,  # NEW: function(t, state) → (vel_pos, vel_theta) adds velocities, fixes, etc.
-    ):
-        # topology & state
-        self.graph = graph
-        self.N = len(graph)
-        self.D = D
-        pos0 = jnp.array(pos).reshape(self.N, D)
-        th0 = jnp.zeros((self.N,))
-        self.state = jnp.concatenate([pos0, th0[:, None]], axis=1)
-        self.vel_pos = jnp.zeros((self.N, D))
-        self.vel_theta = jnp.zeros((self.N,))
 
-        # physical parameters
-        self.L, self.k_e = L, k_e
-        self.r, self.k_r = r, k_r
-        self.gamma, self.gamma_t = gamma, gamma_t
-        self.dt = dt
-
-        # time counter
+class ChiralMetamaterial(DynamicalSystem):
+    """
+    Chiral metamaterial system with graph-based topology and dynamics.
+    
+    The system consists of nodes with:
+    - Spatial positions (x, y, z)
+    - Rotation angles θ
+    - Position velocities
+    - Angular velocities
+    
+    The dynamics include:
+    - Elastic forces from deformed edges
+    - Rotational spring forces
+    - Damping
+    - Optional external forcing and velocity constraints
+    """
+    
+    def __init__(self):
+        super().__init__()
+        # Physical parameters
+        self.L = None  # nominal bar length
+        self.k_e = None  # bar-spring stiffness
+        self.r = None  # winding radius
+        self.k_r = None  # rotational spring stiffness
+        self.gamma = None  # translational damping
+        self.gamma_t = None  # rotational damping
+        self.dt = None  # timestep
+        
+        # Graph structure
+        self.graph = None
+        self.edges = None
+        
+        # Functions for external forces/constraints
+        self.forcing_fn = None
+        self.vel_fn = None
+        
+        # JAX compiled functions
+        self._energy = None
+        self._grad = None
+        
+        # Current time
         self.t = 0.0
 
-        # store forcing function
-        # signature: (t, state, F_int, T_int) -> (F_ext, T_ext)
-        self.forcing_fn = forcing_fn
-        # store velocity function
-        # signature: (t, state, F_int, T_int, vel_pos, vel_theta) -> (vel_pos, vel_theta)
-        self.vel_fn = vel_fn
-
-        # precompute edge list for fast JIT
-        edges = jnp.array(list(graph.edges()), dtype=jnp.int32)
-        self.edges = edges
-
-        # JIT‐compile energy and its gradient
+    def initialize(self, config: DynamicsConfig) -> None:
+        """Initialize the chiral metamaterial system."""
+        super().initialize(config)
+        
+        # Get parameters from config
+        params = config.parameters
+        self.L = params.get("L", 1.0)
+        self.k_e = params.get("k_e", 1e4)
+        self.r = params.get("r", 0.2)
+        self.k_r = params.get("k_r", 10)
+        self.gamma = params.get("gamma", 1.0)
+        self.gamma_t = params.get("gamma_t", 0.1)
+        self.dt = params.get("dt", 1e-4)
+        
+        # Grid parameters for creating lattice
+        grid_type = params.get("grid_type", "3d")
+        grid_size = params.get("grid_size", [8, 8, 8])
+        
+        if isinstance(grid_size, int):
+            if grid_type == "2d":
+                grid_size = [grid_size, grid_size]
+            else:
+                grid_size = [grid_size, grid_size, grid_size]
+        
+        # Initialize graph and positions
+        if grid_type == "3d":
+            m, n, k = grid_size
+            self.graph, pos0, top_idx, bottom_idx = grid_graph_3d(m, n, k)
+        else:
+            raise ValueError(f"Grid type {grid_type} not yet supported")
+        
+        # Update n_particles and dimension from the actual graph
+        self.n_particles = len(self.graph)
+        self.dimension = pos0.shape[1]
+        
+        # Store forcing and velocity functions if provided
+        forcing_params = params.get("forcing", {})
+        if forcing_params.get("type") == "velocity_constraint":
+            v_top_z = forcing_params.get("v_top_z", -0.25)
+            t_release = forcing_params.get("t_release", 20.0)
+            self.vel_fn = make_vel_fn(bottom_idx, top_idx, v_top_z, t_release)
+        elif forcing_params.get("type") == "constant_rotation":
+            rot_rate = forcing_params.get("rot_rate", 0.15)
+            t_release = forcing_params.get("t_release", 20.0)
+            self.vel_fn = vel_fn_const_rot(bottom_idx, top_idx, rot_rate, t_release)
+            
+        self.forcing_fn = params.get("forcing_fn", None)
+        
+        # Precompute edge list for fast JIT
+        self.edges = jnp.array(list(self.graph.edges()), dtype=jnp.int32)
+        
+        # JIT-compile energy and its gradient
         self._energy = jax.jit(self._energy_fn)
         self._grad = jax.jit(jax.grad(self._energy_fn))
-
-    def _energy_fn(self, state):
-        pos = state[:, : self.D]
-        theta = state[:, self.D]
-
-        # 1) bar‐spring with rotation‐shifted rest‐length
+        
+        # Initialize state: [positions, angles, position_velocities, angular_velocities]
+        initial_conditions = config.initial_conditions
+        pos_noise = initial_conditions.get("position_noise", 0.01)
+        angle_noise = initial_conditions.get("angle_noise", 0.01)
+        vel_noise = initial_conditions.get("velocity_noise", 0.01)
+        
+        # Use provided seed for reproducibility
+        seed = params.get("seed", 42)
+        rng = jax.random.PRNGKey(seed)
+        
+        # Initial positions with small random perturbations
+        rng, rng_pos = jax.random.split(rng)
+        positions = pos0 + pos_noise * jax.random.normal(rng_pos, pos0.shape)
+        
+        # Initial angles
+        rng, rng_ang = jax.random.split(rng)
+        angles = angle_noise * jax.random.normal(rng_ang, (self.n_particles,))
+        
+        # Initial velocities
+        rng, rng_vel = jax.random.split(rng)
+        position_velocities = vel_noise * jax.random.normal(rng_vel, (self.n_particles, self.dimension))
+        
+        rng, rng_avel = jax.random.split(rng)
+        angular_velocities = vel_noise * jax.random.normal(rng_avel, (self.n_particles,))
+        
+        # Create state vector
+        self.state = self.ravel_state(positions, angles, position_velocities, angular_velocities)
+        self.initialized = True
+        
+    def _energy_fn(self, positions: jnp.ndarray, theta: jnp.ndarray) -> float:
+        """
+        Compute the total energy of the system.
+        
+        Args:
+            positions: (N, D) array of particle positions
+            theta: (N,) array of rotation angles
+            
+        Returns:
+            Total energy
+        """
+        if self.edges is None or self.L is None or self.r is None or self.k_e is None or self.k_r is None:
+            raise ValueError("System not properly initialized")
+            
+        # 1) bar-spring with rotation-shifted rest-length
         i0, i1 = self.edges[:, 0], self.edges[:, 1]
-        p0, p1 = pos[i0], pos[i1]
+        p0, p1 = positions[i0], positions[i1]
         d = jnp.linalg.norm(p0 - p1, axis=1)
         curr_L = self.L - self.r * (theta[i0] + theta[i1])
         E_edge = 0.5 * self.k_e * jnp.sum((d - curr_L) ** 2)
@@ -72,60 +163,228 @@ class ChiralMetamaterial:
         # 2) rotational spring
         E_rot = 0.5 * self.k_r * jnp.sum(theta**2)
 
-        # no “pin” terms here—those are now in your forcing_fn if you like
-
         return E_edge + E_rot
 
-    def step(self):
-        """One damped‐Euler step under internal forces + user forcing_fn."""
-        state = self.state
-        grad = self._grad(state)  # shape (N, D+1)
-
-        # internal forces & torques
-        F_int = -grad[:, : self.D]
-        T_int = -grad[:, self.D]
-
-        # user‐provided external forcing / constraints
+    def compute_derivatives(self, t: float, state: jnp.ndarray, args: Any = None) -> jnp.ndarray:
+        """
+        Compute the time derivatives using damped dynamics.
+        
+        Args:
+            t: Current time
+            state: Current state vector
+            args: Additional arguments (unused)
+            
+        Returns:
+            Time derivatives of the state
+        """
+        positions, angles, pos_vel, ang_vel = self._unwrap_state(state)
+        
+        # Compute energy gradient
+        grad_fn = jax.grad(self._energy_fn, argnums=(0, 1))
+        grad_pos, grad_theta = grad_fn(positions, angles)
+        
+        # Internal forces & torques
+        F_int = -grad_pos
+        T_int = -grad_theta
+        
+        # External forcing
         if self.forcing_fn is not None:
-            F_ext, T_ext = self.forcing_fn(self.t, state, F_int, T_int)
+            # Reconstruct state in original format for compatibility
+            state_orig = jnp.concatenate([positions, angles[:, None]], axis=1)
+            F_ext, T_ext = self.forcing_fn(t, state_orig, F_int, T_int)
         else:
-            F_ext = jnp.zeros_like(self.vel_pos)
-            T_ext = jnp.zeros_like(self.vel_theta)
-
-        # add damping
-        F = F_int + F_ext - self.gamma * self.vel_pos
-        T = T_int + T_ext - self.gamma_t * self.vel_theta
-
-        # update velocities
-        self.vel_pos = self.vel_pos + self.dt * F
-        self.vel_theta = self.vel_theta + self.dt * T
-
+            F_ext = jnp.zeros_like(pos_vel)
+            T_ext = jnp.zeros_like(ang_vel)
+            
+        # Total forces with damping
+        F = F_int + F_ext - self.gamma * pos_vel
+        T = T_int + T_ext - self.gamma_t * ang_vel
+        
+        # Velocity derivatives (accelerations)
+        pos_vel_dot = F
+        ang_vel_dot = T
+        
+        # Apply velocity constraints if present
         if self.vel_fn is not None:
-            # add user‐provided velocities
-            vel_pos, vel_theta = self.vel_fn(
-                self.t, state, F_int, T_int, self.vel_pos, self.vel_theta
-            )
-            self.vel_pos = vel_pos
-            self.vel_theta = vel_theta
+            # Reconstruct state in original format for compatibility
+            state_orig = jnp.concatenate([positions, angles[:, None]], axis=1)
+            pos_vel_new, ang_vel_new = self.vel_fn(t, state_orig, F_int, T_int, pos_vel, ang_vel)
+            
+            # Override velocities if constraints are active
+            pos_vel = pos_vel_new
+            ang_vel = ang_vel_new
+            
+            # Set accelerations to zero for constrained degrees of freedom
+            # This is a simplified approach; more sophisticated constraint handling could be implemented
+        
+        # Position derivatives (velocities)
+        pos_dot = pos_vel
+        ang_dot = ang_vel
+        
+        return self.ravel_state(pos_dot, ang_dot, pos_vel_dot, ang_vel_dot)
 
-        # integrate positions & angles
-        pos_new = state[:, : self.D] + self.dt * self.vel_pos
-        theta_new = state[:, self.D] + self.dt * self.vel_theta
-
-        # reassemble state
-        self.state = jnp.concatenate([pos_new, theta_new[:, None]], axis=1)
-
-        # advance time
-        self.t += self.dt
-
+    def return_state(self) -> jnp.ndarray:
+        """Return the current state of the system."""
         return self.state
 
-    def simulate(self, steps):
-        traj = []
+    def unwrap_state(self, state: jnp.ndarray) -> Dict[str, jnp.ndarray]:
+        """
+        Unwrap the state into a dictionary of named components.
+        Works across the entire trajectory.
+        
+        Args:
+            state: State array of shape (state_dim,) for single state or (T, state_dim) for trajectory
+            
+        Returns:
+            Dictionary with keys:
+            - 'positions': (N, D) or (T, N, D) array for positions
+            - 'angles': (N,) or (T, N) array for rotation angles
+            - 'position_velocities': (N, D) or (T, N, D) array for position velocities
+            - 'angular_velocities': (N,) or (T, N) array for angular velocities
+            - 'orientations': (N, D) or (T, N, D) array for orientations (computed from angles)
+        """
+        # Handle both single states and trajectories
+        if len(state.shape) == 1:
+            # Single state: (state_dim,)
+            positions, angles, pos_vel, ang_vel = self._unwrap_state(state)
+            
+            # Compute orientations from angles (2D rotation for now)
+            if self.dimension >= 2:
+                cos_theta = jnp.cos(angles)
+                sin_theta = jnp.sin(angles)
+                if self.dimension == 2:
+                    orientations = jnp.stack([cos_theta, sin_theta], axis=1)
+                else:
+                    # For 3D, assume rotation around z-axis
+                    orientations = jnp.stack([cos_theta, sin_theta, jnp.zeros_like(angles)], axis=1)
+            else:
+                orientations = angles[:, None]
+        else:
+            # Trajectory: (T, state_dim)
+            T = state.shape[0]
+            positions_list, angles_list, pos_vel_list, ang_vel_list = [], [], [], []
+            orientations_list = []
+            
+            for i in range(T):
+                pos, ang, pv, av = self._unwrap_state(state[i])
+                positions_list.append(pos)
+                angles_list.append(ang)
+                pos_vel_list.append(pv)
+                ang_vel_list.append(av)
+                
+                # Compute orientations
+                if self.dimension >= 2:
+                    cos_theta = jnp.cos(ang)
+                    sin_theta = jnp.sin(ang)
+                    if self.dimension == 2:
+                        orient = jnp.stack([cos_theta, sin_theta], axis=1)
+                    else:
+                        orient = jnp.stack([cos_theta, sin_theta, jnp.zeros_like(ang)], axis=1)
+                else:
+                    orient = ang[:, None]
+                orientations_list.append(orient)
+            
+            positions = jnp.array(positions_list)
+            angles = jnp.array(angles_list)
+            pos_vel = jnp.array(pos_vel_list)
+            ang_vel = jnp.array(ang_vel_list)
+            orientations = jnp.array(orientations_list)
+
+        return {
+            "positions": positions,
+            "angles": angles,
+            "position_velocities": pos_vel,
+            "angular_velocities": ang_vel,
+            "orientations": orientations,
+        }
+
+    def get_expected_state_shape(self) -> Tuple[int, ...]:
+        """Get the expected shape of the state vector."""
+        # State includes: positions (N*D) + angles (N) + position_velocities (N*D) + angular_velocities (N)
+        return (self.n_particles * self.dimension + self.n_particles + 
+                self.n_particles * self.dimension + self.n_particles,)
+
+    def ravel_state(self, positions: jnp.ndarray, angles: jnp.ndarray, 
+                   pos_vel: jnp.ndarray, ang_vel: jnp.ndarray) -> jnp.ndarray:
+        """Ravel state components into a single state vector."""
+        return jnp.concatenate([
+            positions.ravel(),  # (N*D,)
+            angles.ravel(),     # (N,)
+            pos_vel.ravel(),    # (N*D,)
+            ang_vel.ravel(),    # (N,)
+        ])
+
+    def _unwrap_state(self, state: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        """
+        Unwrap the state vector into its components.
+        
+        Args:
+            state: Flat state vector
+            
+        Returns:
+            Tuple of (positions, angles, position_velocities, angular_velocities)
+        """
+        N, D = self.n_particles, self.dimension
+        
+        # Split state vector
+        pos_size = N * D
+        positions = state[:pos_size].reshape(N, D)
+        angles = state[pos_size:pos_size + N]
+        pos_vel = state[pos_size + N:pos_size + N + pos_size].reshape(N, D)
+        ang_vel = state[pos_size + N + pos_size:]
+        
+        return positions, angles, pos_vel, ang_vel
+
+    def get_graph_info(self) -> Dict[str, Any]:
+        """Get information about the graph structure."""
+        if self.graph is None:
+            raise ValueError("Graph not initialized")
+        return {
+            "n_nodes": len(self.graph),
+            "n_edges": len(self.graph.edges()),
+            "graph": self.graph,
+            "edges": self.edges,
+        }
+
+    def to_networkx_graph(self):
+        """Return the underlying NetworkX graph."""
+        return self.graph
+
+    def step_simulation(self):
+        """
+        Perform one simulation step (for compatibility with original interface).
+        This integrates the dynamics by one timestep.
+        """
+        if self.state is None or self.dt is None:
+            raise ValueError("System not properly initialized")
+            
+        # Compute derivatives
+        derivatives = self.compute_derivatives(self.t, self.state)
+        
+        # Simple Euler integration
+        self.state = self.state + self.dt * derivatives
+        self.t += self.dt
+        
+        return self.state
+
+    def simulate(self, steps: int):
+        """
+        Run simulation for a given number of steps.
+        
+        Args:
+            steps: Number of simulation steps
+            
+        Returns:
+            List of states at each timestep
+        """
+        if self.state is None:
+            raise ValueError("System not properly initialized")
+            
+        trajectory = []
         for _ in range(steps):
-            traj.append(self.state)
-            self.step()
-        return traj
+            trajectory.append(self.state.copy())
+            self.step_simulation()
+        return trajectory
 
 
 def make_vel_fn(bottom_idx, top_idx, v_top_z, t_release=20):
@@ -379,53 +638,56 @@ def animate_temporal_graph_test(
 
 
 if __name__ == "__main__":
+    from ...config.schemas import DynamicsConfig
+    
     m = 8
     n = 8
     k = 8
-    # after you build your grid:
-    G, pos0, top_idx, bottom_idx = grid_graph_3d(m, n, k)
 
-    # make a vel_fn that pins the bottom and drives the top downward at 0.05 units/s
-    my_vel_fn = make_vel_fn(bottom_idx, top_idx, v_top_z=-0.25)
-
-    # const_rotation = vel_fn_const_rot(bottom_idx, top_idx, rot_rate = 0.15)
-
-    mat = ChiralMetamaterial(
-        G,
-        pos0,
-        D=3,
-        dt=1e-3,
-        k_r=1e6,
-        k_e=1e2,
-        forcing_fn=None,  # or whatever extra forces you like
-        vel_fn=my_vel_fn,  # const_rotation
+    mat = ChiralMetamaterial()
+    config = DynamicsConfig(
+        type="chiral_metamaterial",
+        n_particles=0,  # Will be set by the system
+        dimension=3,
+        parameters={
+            "L": 1.0, "k_e": 1e4, "r": 0.2, "k_r": 1e6, 
+            "gamma": 1.0, "gamma_t": 0.1, "dt": 1e-3,
+            "grid_type": "3d", "grid_size": [m, n, k], 
+            "forcing": {"type": "velocity_constraint", "v_top_z": -0.25, "t_release": 20.0},
+            "seed": 42
+        },
+        initial_conditions={
+            "position_noise": 0.01, 
+            "angle_noise": 0.01, 
+            "velocity_noise": 0.01
+        }
     )
+    mat.initialize(config)
 
     # simulate for t_f = 10 s
     t_f = 10.0
     steps = int(t_f / mat.dt)
     traj = mat.simulate(steps)
+    
     # sample every 10 steps
-    traj = traj[::100]
-    traj = jnp.array(traj)
-    pos = traj[:, :, :3]
-    pos = np.array(pos)
-    angle = np.array(traj[:, :, 3])
-    # # map angle to color
-    # cmap = plt.get_cmap('hsv')
-    # norm = plt.Normalize(vmin=np.min(angle), vmax=np.max(angle))
-    # angle = cmap(norm(angle))
+    traj_sampled = traj[::100]
+    traj_array = jnp.array(traj_sampled)
+    
+    # Extract positions and angles using the unwrap_state method
+    unwrapped = mat.unwrap_state(traj_array)
+    pos = np.array(unwrapped["positions"])
+    angles = np.array(unwrapped["angles"])
 
     ani = animate_temporal_graph_test(
         pos,
-        G,
-        title="3D Non-Chiral Metamaterial",
-        node_colors=angle,  # pass scalars shape (T,N)
+        mat.graph,
+        title="3D Chiral Metamaterial",
+        node_colors=angles,  # pass scalars shape (T,N)
         cmap="plasma",  # choose HSV mapping
         show_colorbar=True,
         interval=100,
     )
-    ani.save("chiral_3d_compression_no_chiral.mp4", writer="ffmpeg", fps=10)
-    print(traj.shape)
-
-    # not to self need to create plotting code to set the color of the ndoes to refelect the chirality
+    ani.save("chiral_3d_metamaterial.mp4", writer="ffmpeg", fps=10)
+    print(f"Trajectory shape: {traj_array.shape}")
+    print(f"Positions shape: {pos.shape}")
+    print(f"Angles shape: {angles.shape}")
