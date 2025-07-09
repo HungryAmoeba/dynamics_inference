@@ -10,6 +10,7 @@ from .systems.gravitation import GravitationalSystem
 from .systems.interacting_ga import InteractingGA
 from .systems.swarmalator_breathing import SwarmalatorBreathing
 from .systems.lattice_hamiltonian import LatticeHamiltonianSystem
+from .systems.chiral_metamaterial import ChiralMetamaterial
 
 
 # Registry of available systems
@@ -19,6 +20,7 @@ SYSTEM_REGISTRY: Dict[str, Type[DynamicalSystem]] = {
     "gravitation": GravitationalSystem,
     "ga_general": InteractingGA,
     "lattice_hamiltonian": LatticeHamiltonianSystem,
+    "chiral_metamaterial": ChiralMetamaterial,
 }
 
 

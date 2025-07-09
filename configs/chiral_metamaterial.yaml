@@ -1,0 +1,94 @@
+# Configuration for Chiral Metamaterial system in dynamo_infer pipeline
+
+# Output directory for results
+output_dir: "outputs/chiral_metamaterial"
+
+# Dynamical system configuration
+dynamics:
+  type: "chiral_metamaterial"
+  n_particles: 512  # Will be overridden by grid size
+  dimension: 3
+  
+  parameters:
+    # Physical parameters
+    L: 1.0          # nominal bar length
+    k_e: 1.0e4      # bar-spring stiffness
+    r: 0.2          # winding radius
+    k_r: 1.0e6      # rotational spring stiffness
+    gamma: 1.0      # translational damping
+    gamma_t: 0.1    # rotational damping
+    dt: 1.0e-3      # timestep for internal simulation
+    
+    # Grid parameters
+    grid_type: "3d"
+    grid_size: [8, 8, 8]  # 8x8x8 grid
+    
+    # Forcing/constraint parameters
+    forcing:
+      type: "velocity_constraint"  # Options: "velocity_constraint", "constant_rotation", null
+      v_top_z: -0.25              # z-velocity for top nodes (if velocity_constraint)
+      t_release: 20.0             # time when constraints are released
+      # rot_rate: 0.15            # rotation rate (if constant_rotation)
+    
+    # Random seed for reproducibility
+    seed: 42
+  
+  initial_conditions:
+    position_noise: 0.01    # noise level for initial positions
+    angle_noise: 0.01       # noise level for initial angles
+    velocity_noise: 0.01    # noise level for initial velocities
+
+# Simulation configuration
+simulation:
+  solver: "Tsit5"           # ODE solver
+  time:
+    t0: 0.0
+    t1: 10.0                # simulate for 10 time units
+    dt: 0.01                # output timestep
+  saveat:
+    t0: 0.0
+    t1: 10.0
+    dt: 0.1                 # save every 0.1 time units for visualization
+  rtol: 1.0e-4
+  atol: 1.0e-7
+
+# Visualization configuration
+visualization:
+  backend: "matplotlib"
+  animation: true
+  save_path: "chiral_metamaterial_animation.mp4"
+  fps: 30
+  quality: "high"
+  show_trajectories: false
+  parameters:
+    title: "3D Chiral Metamaterial Dynamics"
+    cmap: "plasma"         # colormap for angles
+    show_colorbar: true
+    interval: 100          # milliseconds between frames
+
+# Inference configuration (optional)
+inference:
+  method: "GA_inference"
+  Gn: 3                    # Geometric algebra grade
+  feature_library:
+    type: "polynomial"
+    degree: 2
+  optimizer: "adam"
+  learning_rate: 1.0e-3
+  epochs: 5000
+  sparsity: 0.01
+  coupling_method: "dense"
+  differentiation_method: "finite_diff"
+  parameters:
+    batch_size: 32
+    validation_split: 0.2
+
+# Evaluation configuration (optional)
+evaluation:
+  metrics: ["mse", "r2", "trajectory"]
+  save_figures: true
+  save_model: true
+  save_results: true
+  comparison_time_horizon: 5.0  # Compare first 5 time units
+  parameters:
+    n_prediction_steps: 500
