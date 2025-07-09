@@ -101,6 +101,12 @@ def run_full_pipeline(
                     # If absolute, still save to output_dir with same filename
                     save_path = output_dir / Path(save_path).name
 
+                # Fallback: if no extension, add .mp4
+                import os
+
+                if not os.path.splitext(str(save_path))[1]:
+                    save_path = str(save_path) + ".mp4"
+
                 if verbose:
                     console.print(
                         f"[blue]DEBUG:[/blue] Visualization will be saved to: {save_path}"
@@ -117,28 +123,50 @@ def run_full_pipeline(
                         f"[blue]DEBUG:[/blue] Unwrapped state has {len(unwrapped)} components: {list(unwrapped.keys())}"
                     )
 
-                # Extract positions and orientations from the dictionary
+                # Extract positions and volumes from the dictionary
                 positions = unwrapped.get("positions")
-                orientations = unwrapped.get("orientations")
+                volumes = unwrapped.get("volumes")
+
+                # Convert to numpy arrays if needed
+                def to_numpy(arr):
+                    import numpy as np
+
+                    if arr is not None and hasattr(arr, "device_buffer"):
+                        return np.array(arr)
+                    return arr
+
+                positions = to_numpy(positions)
+                volumes = to_numpy(volumes)
+
+                # If system is LatticeHamiltonianSystem, get the lattice graph
+                graph = None
+                if system.__class__.__name__ == "LatticeHamiltonianSystem":
+                    graph = system.to_networkx_graph()
+
+                # Pass visualization parameters as kwargs
+                vis_params = dict(getattr(config.visualization, "parameters", {}))
 
                 if positions is not None:
-                    if orientations is not None:
-                        # Systems with positions and orientations
+                    # For lattice hamiltonian, use volumes as node_sizes
+                    if volumes is not None:
                         if verbose:
                             console.print(
-                                f"[blue]DEBUG:[/blue] Visualizing positions and orientations, shapes: {positions.shape}, {orientations.shape}"
+                                f"[blue]DEBUG:[/blue] Visualizing positions with node sizes from volumes, shapes: {positions.shape}, {volumes.shape}"
                             )
                         vis_results = visualizer.visualize(
-                            positions, ori=orientations, save_path=save_path
+                            positions,
+                            save_path=save_path,
+                            graph=graph,
+                            node_sizes=volumes,
+                            **vis_params,
                         )
                     else:
-                        # Systems with only positions
                         if verbose:
                             console.print(
                                 f"[blue]DEBUG:[/blue] Visualizing positions only, shape: {positions.shape}"
                             )
                         vis_results = visualizer.visualize(
-                            positions, save_path=save_path
+                            positions, save_path=save_path, graph=graph, **vis_params
                         )
                 else:
                     # Fallback: pass trajectory directly
@@ -215,7 +243,7 @@ def run_full_pipeline(
 
                 # For GA inference, use the promote_to_GA utility
                 if config.inference.method.lower() == "ga_inference":
-                    from ..utils import promote_to_GA
+                    from dynamo_infer.utils import promote_to_GA
 
                     # Get Gn from config or use default
                     Gn = getattr(config.inference, "Gn", 3)

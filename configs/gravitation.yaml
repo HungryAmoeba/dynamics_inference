@@ -4,30 +4,32 @@ dynamics:
   n_particles: 10
   dimension: 3
   parameters:
-    G: 1.0              # Gravitational constant
-    mass_range: [0.5, 2.0]  # Mass range for particles
-    position_scale: 10.0     # Initial position scale
-    velocity_scale: 0.1      # Initial velocity scale
+    G: 2.0              # Gravitational constant
     seed: 42
     softening: 0.01     # Softening parameter to avoid singularities
+  initial_conditions:
+    position_range: [-10.0, 10.0]     # Initial position scale
+    velocity_range: [-0.4, 0.4]      # Initial velocity scale
 
 simulation:
   solver: "Tsit5"
   time:
     t0: 0.0
-    t1: 50.0
+    t1: 20.0
     dt: 0.1
   rtol: 1e-6
   atol: 1e-9
 
 visualization:
-  backend: "plotly"
+  backend: "matplotlib"
   animation: true
-  save_path: "outputs/gravitation_animation.html"
-  show_trajectories: true
+  save_path: "outputs/gravitation_animation.mp4"
+  fps: 30
+  quality: "high"
+  show_trajectories: false
   parameters:
-    marker_size: 8
-    trail_length: 100
+    figsize: [10, 8]
+    dpi: 150
 
 inference:
   method: "GA_inference" 

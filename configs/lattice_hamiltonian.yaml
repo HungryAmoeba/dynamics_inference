@@ -1,0 +1,100 @@
+# Configuration for Lattice Hamiltonian System
+# This system implements overdamped dynamics on a lattice with elastic, volume, and coupling terms
+
+dynamics:
+  type: "lattice_hamiltonian"
+  n_particles: 25  # Will be overridden by grid_size for grid systems
+  dimension: 2  # 2 or 3
+  
+  parameters:
+    # Hamiltonian parameters
+    k: 1.0          # Elastic constant for displacement coupling
+    c: 1.0          # Volume stiffness parameter
+    lambda: 0.5     # Coupling parameter between displacement and volume
+    b: 1.0          # Coupling coefficient for divergence term
+    kappa: 0.0      # Penalty for norm of u_i (new)
+    
+    # Damping coefficients
+    gamma_u: 1.0    # Displacement field damping
+    gamma_v: 1.0    # Volume field damping
+    
+    # Lattice parameters
+    grid_type: "2d"     # "2d" or "3d"
+    grid_size: 5        # Size of grid (e.g., 5x5 or 5x5x5)
+    lattice_spacing: 1.0  # Spacing between lattice sites
+    
+    # Random seed for reproducibility
+    seed: 42
+  
+  initial_conditions:
+    displacement_range: [-0.1, 0.1]  # Range for initial displacement field
+    volume_range: [-0.1, 0.1]        # Range for initial volume field
+
+simulation:
+  solver: "Tsit5"
+  time:
+    t0: 0.0
+    t1: 10.0
+    dt: 0.01
+  saveat:
+    t0: 0.0
+    t1: 10.0
+    dt: 0.1
+  rtol: 1e-4
+  atol: 1e-7
+  max_steps: 10000
+
+visualization:
+  backend: "matplotlib"
+  animation: true
+  save_path: "outputs/lattice_hamiltonian.mp4"
+  fps: 30
+  quality: "high"
+  show_trajectories: false
+  parameters:
+    # Visualization-specific parameters
+    show_volumes: true
+    show_displacements: true
+    color_by_volume: true
+
+inference:
+  method: "GA_inference"
+  feature_library:
+    type: "polynomial"
+    degree: 3
+  optimizer: "adam"
+  learning_rate: 1e-3
+  epochs: 10000
+  sparsity: 0.0
+  coupling_method: "dense"
+  differentiation_method: "finite_diff"
+
+evaluation:
+  metrics: ["mse", "r2", "trajectory"]
+  save_figures: true
+  save_model: true
+  save_results: true
+  comparison_time_horizon: 5.0
+
+# Example 3D configuration (uncomment to use)
+# dynamics:
+#   type: "lattice_hamiltonian"
+#   n_particles: 125  # 5x5x5
+#   dimension: 3
+#   
+#   parameters:
+#     k: 1.0
+#     c: 1.0
+#     lambda: 0.5
+#     b: 1.0
+#     kappa: 0.0      # Penalty for norm of u_i (new)
+#     gamma_u: 1.0
+#     gamma_v: 1.0
+#     grid_type: "3d"
+#     grid_size: 5
+#     lattice_spacing: 1.0
+#     seed: 42
+#   
+#   initial_conditions:
+#     displacement_range: [-0.1, 0.1]
+#     volume_range: [-0.1, 0.1] 

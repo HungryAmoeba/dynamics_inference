@@ -47,10 +47,30 @@ class ODESimulator(Simulator):
         t1 = self.config.time.t1
         dt0 = self.config.time.dt
 
-        # Set up save points
-        save_t0 = getattr(self.config.saveat, "t0", t0)
-        save_t1 = getattr(self.config.saveat, "t1", t1)
-        save_dt = getattr(self.config.saveat, "dt", dt0)
+        # Set up save points (robust to missing saveat)
+        save_t0 = (
+            getattr(self.config.saveat, "t0", None)
+            if hasattr(self.config, "saveat") and self.config.saveat is not None
+            else None
+        )
+        save_t1 = (
+            getattr(self.config.saveat, "t1", None)
+            if hasattr(self.config, "saveat") and self.config.saveat is not None
+            else None
+        )
+        save_dt = (
+            getattr(self.config.saveat, "dt", None)
+            if hasattr(self.config, "saveat") and self.config.saveat is not None
+            else None
+        )
+
+        if save_t0 is None:
+            save_t0 = t0
+        if save_t1 is None:
+            save_t1 = t1
+        if save_dt is None:
+            save_dt = dt0
+
         saveat = SaveAt(ts=list(jnp.arange(save_t0, save_t1 + save_dt, save_dt)))
 
         # Get initial state

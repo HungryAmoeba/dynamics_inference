@@ -1,19 +1,21 @@
 # Swarmalator system configuration
 dynamics:
   type: "swarmalator"
-  n_particles: 50
+  n_particles: 100
   dimension: 3
   parameters:
-    J: 1.0              # Coupling strength
-    K: 1.0              # Phase coupling  
-    box_size: 5.0       # Initial position range
-    frequency_std: 0.1  # Natural frequency std
+    # Physics parameters (matching gadynamics implementation)
+    alpha: 1.0              # Exponent for spatial attraction
+    beta: 3.0               # Exponent for spatial repulsion  
+    gamma: 1.0              # Exponent for phase coupling
+    J: 0.2                  # Phase attraction parameter, between -1 and 1
+    R: 1.4                  # Vision radius, between 0 and 2
+    epsilon_a: 0.5          # Attractive phase coupling strength
+    epsilon_r: 0.5          # Repulsive phase coupling strength
+    noise_strength: 0.0     # Noise strength (0 for deterministic)
     seed: 42
   initial_conditions:
-    # Positions initialized randomly in [-box_size/2, box_size/2]^D
-    # Orientations initialized randomly on unit sphere
-    # Phases initialized randomly in [0, 2π]
-    # Natural frequencies drawn from N(0, frequency_std^2)
+    position_range: [-1.0, 1.0]  # Initial positions drawn from a box [-1,1] in each dimension
 
 simulation:
   solver: "Tsit5"
@@ -37,23 +39,23 @@ visualization:
     figsize: [10, 8]
     dpi: 150
 
-inference:
-  method: "GA_inference"
-  feature_library:
-    type: "orthogonal_polynomial"
-    degree: 3
-  optimizer: "adam"
-  learning_rate: 1e-3
-  epochs: 5000
-  sparsity: 0.01
-  coupling_method: "dense"
-  differentiation_method: "savgol"
+# inference:
+#   method: "GA_inference"
+#   feature_library:
+#     type: "orthogonal_polynomial"
+#     degree: 3
+#   optimizer: "adam"
+#   learning_rate: 1e-3
+#   epochs: 5000
+#   sparsity: 0.01
+#   coupling_method: "dense"
+#   differentiation_method: "savgol"
 
-evaluation:
-  metrics: ["mse", "r2", "trajectory"]
-  save_figures: true
-  save_model: true
-  save_results: true
-  comparison_time_horizon: 5.0  # Compare over 5 time units
+# evaluation:
+#   metrics: ["mse", "r2", "trajectory"]
+#   save_figures: true
+#   save_model: true
+#   save_results: true
+#   comparison_time_horizon: 5.0  # Compare over 5 time units
 
 output_dir: "./outputs"

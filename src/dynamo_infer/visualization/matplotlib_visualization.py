@@ -1,35 +1,105 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import networkx as nx
 from matplotlib.animation import FuncAnimation
+from .temporal_graph_matplotlib import animate_temporal_graph
+
+
+def to_numpy(arr):
+    if arr is not None and not isinstance(arr, np.ndarray):
+        try:
+            return np.array(arr)
+        except Exception:
+            pass
+    return arr
+
+
+def rescale_node_sizes(sizes, min_size=50, max_size=500, shift=True):
+    sizes = np.asarray(sizes)
+    if sizes.ndim == 1:
+        sizes = sizes[None, :]  # (1, N) for static
+    min_val = np.min(sizes)
+    max_val = np.max(sizes)
+    if shift:
+        sizes = sizes - min_val  # shift to start at 0
+        max_val = np.max(sizes)
+        min_val = 0
+    if max_val > min_val:
+        scaled = min_size + (sizes - min_val) * (max_size - min_size) / (
+            max_val - min_val
+        )
+    else:
+        scaled = np.full_like(sizes, (min_size + max_size) / 2)
+    return scaled.squeeze()
 
 
 class MatplotlibVisualizer:
     """
-    Visualizer for particle dynamics using matplotlib animations.
+    Visualizer for particle dynamics using matplotlib temporal graph animations.
     """
 
     def __init__(self, config=None):
         self.config = config or {}
 
-    def visualize(self, pos, ori=None, save_path=None, **kwargs):
+    def visualize(
+        self,
+        pos,
+        ori=None,
+        save_path=None,
+        graph=None,
+        node_colors=None,
+        edge_colors=None,
+        node_sizes=None,
+        **kwargs,
+    ):
         """
-        Visualize particle motion using matplotlib.
+        Visualize particle motion using matplotlib temporal graph animation.
         Args:
             pos: Array of shape (T, N, D) where D=2 or 3
             ori: Optional array of shape (T, N, D) for orientations
             save_path: Path to save the animation (mp4)
+            graph: Optional networkx.Graph object. If None, use no edges.
+            node_colors: Optional array for node colors
+            edge_colors: Optional array for edge colors
+            node_sizes: Optional array for node sizes (T, N) or (N,)
             **kwargs: Additional arguments (e.g., interval, title)
         Returns:
             anim: The matplotlib.animation.FuncAnimation object
         """
+        # Robustly convert all arrays to numpy
+        pos = to_numpy(pos)
+        ori = to_numpy(ori)
+        node_colors = to_numpy(node_colors)
+        edge_colors = to_numpy(edge_colors)
+        node_sizes = to_numpy(node_sizes)
         interval = getattr(self.config, "interval", 50) if self.config else 50
         title = getattr(self.config, "title", None) if self.config else None
         if "interval" in kwargs:
             interval = kwargs.pop("interval")
         if "title" in kwargs:
             title = kwargs.pop("title")
-        anim = animate_particle_motion(
-            pos, ori=ori, interval=interval, title=title, **kwargs
+        if graph is None:
+            # Create a graph with N nodes and no edges
+            N = pos.shape[1]
+            graph = nx.empty_graph(N)
+        # Shape check
+        if pos.ndim != 3:
+            raise ValueError(f"pos must be (T, N, D), got shape {pos.shape}")
+        if ori is not None and (ori.ndim != 3 and ori.ndim != 2):
+            raise ValueError(f"ori must be (T, N, D) or (T, N), got shape {ori.shape}")
+        # Rescale node sizes if provided
+        if node_sizes is not None:
+            node_sizes = rescale_node_sizes(node_sizes)
+        anim = animate_temporal_graph(
+            pos,
+            graph,
+            ori=ori,
+            node_colors=node_colors,
+            edge_colors=edge_colors,
+            node_sizes=node_sizes,
+            interval=interval,
+            title=title,
+            **kwargs,
         )
         if save_path is not None:
             fps = int(1000 / interval)

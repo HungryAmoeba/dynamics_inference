@@ -1,69 +1,64 @@
 import jax.numpy as jnp
 import jax.random as jrandom
 import jax
-from typing import Tuple, Any
-from ..base import InteractingParticleSystem
+from typing import Tuple, Any, Dict
+from ..base import DynamicalSystem
 from ...config.schemas import DynamicsConfig
 
 
-class GravitationalSystem(InteractingParticleSystem):
+class GravitationalSystem(DynamicalSystem):
     def __init__(self):
-        self.state = None
-        self.dimension = None
-        self.num_particles = None
+        super().__init__()
         self.G = None
         self.masses = None
         self.rng = None
 
-    def initialize(self, config):
+    def initialize(self, config: DynamicsConfig) -> None:
         """
-        Expects a config dictionary with keys:
-          - 'dimension': 2 or 3 (default 3)
-          - 'num_particles': number of particles (default 3)
-          - 'G': gravitational constant (default 1.0)
-          - 'initial_conditions': dict with:
-              - 'position_range': [min, max] for initial positions (default [-1,1])
-              - 'velocity_range': [min, max] for initial velocities (default [-0.1,0.1])
-          - 'rng_key': (optional) a JAX PRNGKey; if not provided, a default key is used.
+        Initialize the gravitational system with the provided configuration.
+
+        Args:
+            config: DynamicsConfig object specifying system parameters
         """
-        self.dimension = config.get("dimension", 3)
-        self.num_particles = config.get("num_particles", 3)
-        self.G = config.get("G", 1.0)
-        pos_range = config.get("initial_conditions", {}).get(
-            "position_range", [-1.0, 1.0]
-        )
-        vel_range = config.get("initial_conditions", {}).get(
-            "velocity_range", [-0.1, 0.1]
-        )
+        super().initialize(config)
+
+        # Get parameters from config
+        params = config.parameters
+        self.G = params.get("G", 1.0)
+
+        # Get initial conditions
+        initial_conditions = config.initial_conditions
+        pos_range = initial_conditions.get("position_range", [-1.0, 1.0])
+        vel_range = initial_conditions.get("velocity_range", [-0.1, 0.1])
+
         # Use provided RNG key or a default one
-        self.rng = (
-            jrandom.PRNGKey(config.get("rng_key", 0))
-            if isinstance(config.get("rng_key"), int)
-            else config.get("rng_key", jrandom.PRNGKey(0))
-        )
+        seed = params.get("seed", 42)
+        self.rng = jrandom.PRNGKey(seed)
 
         # Create positions and velocities randomly
         positions = jrandom.uniform(
             self.rng,
-            (self.num_particles, self.dimension),
+            (self.n_particles, self.dimension),
             minval=pos_range[0],
             maxval=pos_range[1],
         )
         self.rng, rng_vel = jrandom.split(self.rng)
         velocities = jrandom.uniform(
             rng_vel,
-            (self.num_particles, self.dimension),
+            (self.n_particles, self.dimension),
             minval=vel_range[0],
             maxval=vel_range[1],
         )
+
         # For simplicity, we assign unit mass to every particle. This can be extended.
-        self.masses = jnp.ones(self.num_particles)
+        self.masses = jnp.ones(self.n_particles)
 
         self.state = self.ravel_state(positions, velocities)
-        # self.state = {'positions': positions, 'velocities': velocities}
-        # self.state = jnp.concat
+        self.initialized = True
 
-    def compute_derivatives(self, t, state, args):
+    def compute_derivatives(
+        self, t: float, state: jnp.ndarray, args: Any = None
+    ) -> jnp.ndarray:
         """
         Computes the derivative d/dt state = { d(positions)/dt, d(velocities)/dt }.
         The derivative of the positions is the velocity.
@@ -91,79 +86,104 @@ class GravitationalSystem(InteractingParticleSystem):
             return acc
 
         # Vectorize the acceleration computation for all particles.
-        acceleration = jax.vmap(acceleration_on_particle)(
-            jnp.arange(self.num_particles)
-        )
+        acceleration = jax.vmap(acceleration_on_particle)(jnp.arange(self.n_particles))
 
         return self.ravel_state(velocities, acceleration)
 
-    def return_state(self):
+    def return_state(self) -> jnp.ndarray:
+        """Return the current state of the system."""
         return self.state
 
-    def ravel_state(self, positions, velocities):
-        return jnp.concat(
+    def ravel_state(
+        self, positions: jnp.ndarray, velocities: jnp.ndarray
+    ) -> jnp.ndarray:
+        """Ravel positions and velocities into a single state vector."""
+        return jnp.concatenate(
             [
                 positions.ravel(),  # Flatten positions (shape: (N*d,))
                 velocities.ravel(),  # Flatten velocities (shape: (N*d,))
             ]
         )
 
-    def _unwrap_state(self, state):
+    def _unwrap_state(self, state: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Unwraps the state into positions and velocities.
         Expects a flat state array of shape (2*N*d,)
-        Returns a dictionary with 'positions' and 'velocities'.
+        Returns positions and velocities as separate arrays.
         """
-        positions = state[: self.num_particles * self.dimension].reshape(
-            self.num_particles, self.dimension
+        positions = state[: self.n_particles * self.dimension].reshape(
+            self.n_particles, self.dimension
         )
-        velocities = state[self.num_particles * self.dimension :].reshape(
-            self.num_particles, self.dimension
+        velocities = state[self.n_particles * self.dimension :].reshape(
+            self.n_particles, self.dimension
         )
 
         return positions, velocities
 
-    def unwrap_state(self, state):
+    def unwrap_state(self, state: jnp.ndarray) -> Dict[str, jnp.ndarray]:
         """
         Unwraps the state into a dictionary of named components.
         Works across the entire trajectory.
 
+        Args:
+            state: State array of shape (state_dim,) for single state or (T, state_dim) for trajectory
+
         Returns:
             Dictionary with keys:
-            - 'positions': (T, N, D) array for positions
-            - 'velocities': (T, N, D) array for velocities
+            - 'positions': (N, D) or (T, N, D) array for positions
+            - 'orientations': (N, D) or (T, N, D) array for velocities (renamed for GA compatibility)
         """
-        positions = state[:, : self.num_particles * self.dimension].reshape(
-            -1, self.num_particles, self.dimension
-        )
+        # Handle both single states and trajectories
+        if len(state.shape) == 1:
+            # Single state: (state_dim,)
+            positions = state[: self.n_particles * self.dimension].reshape(
+                self.n_particles, self.dimension
+            )
+            velocities = state[self.n_particles * self.dimension :].reshape(
+                self.n_particles, self.dimension
+            )
+        else:
+            # Trajectory: (T, state_dim)
+            positions = state[:, : self.n_particles * self.dimension].reshape(
+                -1, self.n_particles, self.dimension
+            )
+            velocities = state[:, self.n_particles * self.dimension :].reshape(
+                -1, self.n_particles, self.dimension
+            )
 
         return {
             "positions": positions,
-            "velocities": None,  # Gravitational system doesn't have orientations
+            "orientations": velocities,  # Use velocities as orientations for GA compatibility
         }
+
+    def get_expected_state_shape(self) -> Tuple[int, ...]:
+        """Get the expected shape of the state vector."""
+        return (2 * self.n_particles * self.dimension,)
 
 
 if __name__ == "__main__":
-    config = {
-        "dimension": 3,  # working in 3D space
-        "num_particles": 5,
-        "G": 1.0,
-        "initial_conditions": {
+    # Test with the new configuration structure
+    from ...config.schemas import DynamicsConfig
+
+    config = DynamicsConfig(
+        type="gravitation",
+        n_particles=5,
+        dimension=3,
+        parameters={
+            "G": 1.0,
+            "seed": 42,
+        },
+        initial_conditions={
             "position_range": [-1.0, 1.0],
             "velocity_range": [-0.1, 0.1],
         },
-        "rng_key": jrandom.PRNGKey(42),
-    }
+    )
 
     system = GravitationalSystem()
     system.initialize(config)
     initial_state = system.return_state()
-    print("Initial State:")
-    print("Positions:\n", initial_state["positions"])
-    print("Velocities:\n", initial_state["velocities"])
+    print("Initial State Shape:", initial_state.shape)
 
-    # Compute derivative (state derivative, i.e., time derivatives of positions and velocities)
-    dstate = system.derivative(initial_state)
-    print("\nState Derivatives:")
-    print("dPositions/dt:\n", dstate["positions"])
-    print("dVelocities/dt:\n", dstate["velocities"])
+    # Compute derivative
+    dstate = system.compute_derivatives(0.0, initial_state)
+    print("Derivative Shape:", dstate.shape)

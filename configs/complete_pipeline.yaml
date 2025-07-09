@@ -1,0 +1,66 @@
+# Complete pipeline configuration with all steps enabled
+dynamics:
+  type: lattice_hamiltonian
+  n_particles: 25  # Will be overridden by grid_size
+  dimension: 2
+  parameters:
+    k: 1.0
+    c: 1.0
+    lambda: 0.5
+    b: 1.0
+    gamma_u: 1.0
+    gamma_v: 1.0
+    grid_type: 2d
+    grid_size: 5
+    lattice_spacing: 1.0
+    seed: 42
+    driving_amplitude: 0.5
+    driving_frequency: 2.0
+    driven_sites: [12]  # Center site in 5x5 grid
+  initial_conditions:
+    displacement_range: [-0.1, 0.1]
+    volume_range: [-0.1, 0.1]
+
+simulation:
+  solver: tsit5
+  time:
+    t0: 0.0
+    t1: 10.0
+    dt: 0.01
+  saveat:
+    t0: 0.0
+    t1: 10.0
+    dt: 0.01
+  rtol: 1e-6
+  atol: 1e-8
+
+visualization:
+  backend: matplotlib
+  save_path: lattice_hamiltonian_driven.mp4
+  fps: 30
+  animation: true
+  quality: high
+  parameters: {}
+
+inference:
+  method: ga_inference
+  feature_library:
+    type: polynomial
+    degree: 3
+    parameters: {}
+  optimizer: adam
+  learning_rate: 1e-3
+  epochs: 1000
+  sparsity: 0.0
+  coupling_method: dense
+  differentiation_method: finite_diff
+  parameters: {}
+
+evaluation:
+  metrics: [mse, r2, trajectory]
+  save_figures: true
+  save_model: true
+  save_results: true
+  parameters: {}
+
+output_dir: "./outputs/complete_pipeline" 

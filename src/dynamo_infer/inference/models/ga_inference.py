@@ -265,10 +265,11 @@ class GA_DynamicsInference(DynamicsInferrer):
             axis=-1,
         )
 
-        # Scale differences by distances
+        # Normalize differences to unit vectors (with epsilon to avoid division by zero)
+        eps = 1e-8
         diffs = jnp.concat(
             [
-                diffs[..., idxs] * dists[..., g][..., None]
+                diffs[..., idxs] / (dists[..., g][..., None] + eps)
                 for g, idxs in sorted(self.g_to_idxs.items())
             ],
             axis=-1,
@@ -363,9 +364,11 @@ class GA_DynamicsInference(DynamicsInferrer):
             axis=-1,
         )
 
+        # Normalize differences to unit vectors (with epsilon to avoid division by zero)
+        eps = 1e-8
         diffs = jnp.concat(
             [
-                diffs[..., idxs] * dists[..., g][..., None]
+                diffs[..., idxs] / (dists[..., g][..., None] + eps)
                 for g, idxs in sorted(self.g_to_idxs.items())
             ],
             axis=-1,

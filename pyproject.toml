@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "Charles Xu", email = "charlsxu@mit.edu"},
 ]
 keywords = ["dynamics", "inference", "simulation", "physics", "geometric-algebra"]
 classifiers = [
@@ -70,16 +70,13 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/dynamo-infer"
+Homepage = "https://github.com/HungryAmoeba/dynamics_inference"
 Documentation = "https://dynamo-infer.readthedocs.io"
-Repository = "https://github.com/yourusername/dynamo-infer"
-"Bug Tracker" = "https://github.com/yourusername/dynamo-infer/issues"
+Repository = "https://github.com/HungryAmoeba/dynamics_inference"
+"Bug Tracker" = "https://github.com/HungryAmoeba/dynamics_inference/issues"
 
 [project.scripts]
-dynamo-infer = "dynamo_infer.cli:main"
-dynamo-simulate = "dynamo_infer.cli:simulate"
-dynamo-infer-dynamics = "dynamo_infer.cli:infer"
-dynamo-evaluate = "dynamo_infer.cli:evaluate"
+dynamo-infer = "dynamo_infer.cli.main:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
