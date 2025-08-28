@@ -48,12 +48,14 @@ trajectory, times = simulator.run()
 
 ```bash
 # Run complete pipeline
-dynamo-infer --config configs/swarmalator.yaml --output outputs/
+dynamo-infer configs/swarmalator.yaml --output outputs/
 
 # Run individual steps
-dynamo-simulate --config configs/swarmalator.yaml
-dynamo-infer-dynamics --trajectory outputs/trajectory.npz
-dynamo-evaluate --model outputs/model.pkl --trajectory outputs/trajectory.npz
+dynamo-simulate configs/swarmalator.yaml
+# (for inference, provide the trajectory file as a positional argument)
+dynamo-infer-dynamics outputs/trajectory.npz
+# (for evaluation, provide model and trajectory as positional arguments)
+dynamo-evaluate outputs/model.pkl outputs/trajectory.npz
 ```
 
 ## 📁 Project Structure

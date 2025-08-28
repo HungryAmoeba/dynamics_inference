@@ -15,20 +15,20 @@ from ...config.schemas import DynamicsConfig
 class ChiralMetamaterial(DynamicalSystem):
     """
     Chiral metamaterial system with graph-based topology and dynamics.
-    
+
     The system consists of nodes with:
     - Spatial positions (x, y, z)
     - Rotation angles θ
     - Position velocities
     - Angular velocities
-    
+
     The dynamics include:
     - Elastic forces from deformed edges
     - Rotational spring forces
     - Damping
     - Optional external forcing and velocity constraints
     """
-    
+
     def __init__(self):
         super().__init__()
         # Physical parameters
@@ -39,26 +39,26 @@ class ChiralMetamaterial(DynamicalSystem):
         self.gamma = None  # translational damping
         self.gamma_t = None  # rotational damping
         self.dt = None  # timestep
-        
+
         # Graph structure
         self.graph = None
         self.edges = None
-        
+
         # Functions for external forces/constraints
         self.forcing_fn = None
         self.vel_fn = None
-        
+
         # JAX compiled functions
         self._energy = None
         self._grad = None
-        
+
         # Current time
         self.t = 0.0
 
     def initialize(self, config: DynamicsConfig) -> None:
         """Initialize the chiral metamaterial system."""
         super().initialize(config)
-        
+
         # Get parameters from config
         params = config.parameters
         self.L = params.get("L", 1.0)
@@ -68,91 +68,104 @@ class ChiralMetamaterial(DynamicalSystem):
         self.gamma = params.get("gamma", 1.0)
         self.gamma_t = params.get("gamma_t", 0.1)
         self.dt = params.get("dt", 1e-4)
-        
+
         # Grid parameters for creating lattice
         grid_type = params.get("grid_type", "3d")
         grid_size = params.get("grid_size", [8, 8, 8])
-        
+
         if isinstance(grid_size, int):
             if grid_type == "2d":
                 grid_size = [grid_size, grid_size]
             else:
                 grid_size = [grid_size, grid_size, grid_size]
-        
+
         # Initialize graph and positions
         if grid_type == "3d":
             m, n, k = grid_size
             self.graph, pos0, top_idx, bottom_idx = grid_graph_3d(m, n, k)
         else:
             raise ValueError(f"Grid type {grid_type} not yet supported")
-        
+
         # Update n_particles and dimension from the actual graph
         self.n_particles = len(self.graph)
         self.dimension = pos0.shape[1]
-        
+
         # Store forcing and velocity functions if provided
         forcing_params = params.get("forcing", {})
-        if forcing_params.get("type") == "velocity_constraint":
+        if forcing_params and forcing_params.get("type") == "velocity_constraint":
             v_top_z = forcing_params.get("v_top_z", -0.25)
             t_release = forcing_params.get("t_release", 20.0)
             self.vel_fn = make_vel_fn(bottom_idx, top_idx, v_top_z, t_release)
-        elif forcing_params.get("type") == "constant_rotation":
+        elif forcing_params and forcing_params.get("type") == "constant_rotation":
             rot_rate = forcing_params.get("rot_rate", 0.15)
             t_release = forcing_params.get("t_release", 20.0)
             self.vel_fn = vel_fn_const_rot(bottom_idx, top_idx, rot_rate, t_release)
-            
+        else:
+            self.vel_fn = None
+
         self.forcing_fn = params.get("forcing_fn", None)
-        
+
         # Precompute edge list for fast JIT
         self.edges = jnp.array(list(self.graph.edges()), dtype=jnp.int32)
-        
-        # JIT-compile energy and its gradient
-        self._energy = jax.jit(self._energy_fn)
-        self._grad = jax.jit(jax.grad(self._energy_fn))
-        
+
+        # Energy function (no JIT for diffrax compatibility)
+        self._energy = self._energy_fn
+
         # Initialize state: [positions, angles, position_velocities, angular_velocities]
         initial_conditions = config.initial_conditions
         pos_noise = initial_conditions.get("position_noise", 0.01)
         angle_noise = initial_conditions.get("angle_noise", 0.01)
         vel_noise = initial_conditions.get("velocity_noise", 0.01)
-        
+
         # Use provided seed for reproducibility
         seed = params.get("seed", 42)
         rng = jax.random.PRNGKey(seed)
-        
+
         # Initial positions with small random perturbations
         rng, rng_pos = jax.random.split(rng)
         positions = pos0 + pos_noise * jax.random.normal(rng_pos, pos0.shape)
-        
+
         # Initial angles
         rng, rng_ang = jax.random.split(rng)
         angles = angle_noise * jax.random.normal(rng_ang, (self.n_particles,))
-        
+
         # Initial velocities
         rng, rng_vel = jax.random.split(rng)
-        position_velocities = vel_noise * jax.random.normal(rng_vel, (self.n_particles, self.dimension))
-        
+        position_velocities = vel_noise * jax.random.normal(
+            rng_vel, (self.n_particles, self.dimension)
+        )
+
         rng, rng_avel = jax.random.split(rng)
-        angular_velocities = vel_noise * jax.random.normal(rng_avel, (self.n_particles,))
-        
+        angular_velocities = vel_noise * jax.random.normal(
+            rng_avel, (self.n_particles,)
+        )
+
         # Create state vector
-        self.state = self.ravel_state(positions, angles, position_velocities, angular_velocities)
+        self.state = self.ravel_state(
+            positions, angles, position_velocities, angular_velocities
+        )
         self.initialized = True
-        
+
     def _energy_fn(self, positions: jnp.ndarray, theta: jnp.ndarray) -> float:
         """
         Compute the total energy of the system.
-        
+
         Args:
             positions: (N, D) array of particle positions
             theta: (N,) array of rotation angles
-            
+
         Returns:
             Total energy
         """
-        if self.edges is None or self.L is None or self.r is None or self.k_e is None or self.k_r is None:
+        if (
+            self.edges is None
+            or self.L is None
+            or self.r is None
+            or self.k_e is None
+            or self.k_r is None
+        ):
             raise ValueError("System not properly initialized")
-            
+
         # 1) bar-spring with rotation-shifted rest-length
         i0, i1 = self.edges[:, 0], self.edges[:, 1]
         p0, p1 = positions[i0], positions[i1]
@@ -165,28 +178,40 @@ class ChiralMetamaterial(DynamicalSystem):
 
         return E_edge + E_rot
 
-    def compute_derivatives(self, t: float, state: jnp.ndarray, args: Any = None) -> jnp.ndarray:
+    def compute_derivatives(
+        self, t: float, state: jnp.ndarray, args: Any = None
+    ) -> jnp.ndarray:
         """
         Compute the time derivatives using damped dynamics.
-        
+
         Args:
             t: Current time
             state: Current state vector
             args: Additional arguments (unused)
-            
+
         Returns:
             Time derivatives of the state
         """
         positions, angles, pos_vel, ang_vel = self._unwrap_state(state)
-        
-        # Compute energy gradient
-        grad_fn = jax.grad(self._energy_fn, argnums=(0, 1))
-        grad_pos, grad_theta = grad_fn(positions, angles)
-        
+
+        # Compute energy gradient manually for diffrax compatibility
+        # Manual gradient computation to avoid jax.grad issues with diffrax
+
+        # Gradient with respect to positions
+        def energy_pos(pos):
+            return self._energy_fn(pos, angles)
+
+        # Gradient with respect to angles
+        def energy_theta(theta):
+            return self._energy_fn(positions, theta)
+
+        grad_pos = jax.grad(energy_pos)(positions)
+        grad_theta = jax.grad(energy_theta)(angles)
+
         # Internal forces & torques
         F_int = -grad_pos
         T_int = -grad_theta
-        
+
         # External forcing
         if self.forcing_fn is not None:
             # Reconstruct state in original format for compatibility
@@ -195,32 +220,34 @@ class ChiralMetamaterial(DynamicalSystem):
         else:
             F_ext = jnp.zeros_like(pos_vel)
             T_ext = jnp.zeros_like(ang_vel)
-            
+
         # Total forces with damping
         F = F_int + F_ext - self.gamma * pos_vel
         T = T_int + T_ext - self.gamma_t * ang_vel
-        
+
         # Velocity derivatives (accelerations)
         pos_vel_dot = F
         ang_vel_dot = T
-        
+
         # Apply velocity constraints if present
         if self.vel_fn is not None:
             # Reconstruct state in original format for compatibility
             state_orig = jnp.concatenate([positions, angles[:, None]], axis=1)
-            pos_vel_new, ang_vel_new = self.vel_fn(t, state_orig, F_int, T_int, pos_vel, ang_vel)
-            
+            pos_vel_new, ang_vel_new = self.vel_fn(
+                t, state_orig, F_int, T_int, pos_vel, ang_vel
+            )
+
             # Override velocities if constraints are active
             pos_vel = pos_vel_new
             ang_vel = ang_vel_new
-            
+
             # Set accelerations to zero for constrained degrees of freedom
             # This is a simplified approach; more sophisticated constraint handling could be implemented
-        
+
         # Position derivatives (velocities)
         pos_dot = pos_vel
         ang_dot = ang_vel
-        
+
         return self.ravel_state(pos_dot, ang_dot, pos_vel_dot, ang_vel_dot)
 
     def return_state(self) -> jnp.ndarray:
@@ -231,10 +258,10 @@ class ChiralMetamaterial(DynamicalSystem):
         """
         Unwrap the state into a dictionary of named components.
         Works across the entire trajectory.
-        
+
         Args:
             state: State array of shape (state_dim,) for single state or (T, state_dim) for trajectory
-            
+
         Returns:
             Dictionary with keys:
             - 'positions': (N, D) or (T, N, D) array for positions
@@ -247,7 +274,7 @@ class ChiralMetamaterial(DynamicalSystem):
         if len(state.shape) == 1:
             # Single state: (state_dim,)
             positions, angles, pos_vel, ang_vel = self._unwrap_state(state)
-            
+
             # Compute orientations from angles (2D rotation for now)
             if self.dimension >= 2:
                 cos_theta = jnp.cos(angles)
@@ -256,7 +283,9 @@ class ChiralMetamaterial(DynamicalSystem):
                     orientations = jnp.stack([cos_theta, sin_theta], axis=1)
                 else:
                     # For 3D, assume rotation around z-axis
-                    orientations = jnp.stack([cos_theta, sin_theta, jnp.zeros_like(angles)], axis=1)
+                    orientations = jnp.stack(
+                        [cos_theta, sin_theta, jnp.zeros_like(angles)], axis=1
+                    )
             else:
                 orientations = angles[:, None]
         else:
@@ -264,14 +293,14 @@ class ChiralMetamaterial(DynamicalSystem):
             T = state.shape[0]
             positions_list, angles_list, pos_vel_list, ang_vel_list = [], [], [], []
             orientations_list = []
-            
+
             for i in range(T):
                 pos, ang, pv, av = self._unwrap_state(state[i])
                 positions_list.append(pos)
                 angles_list.append(ang)
                 pos_vel_list.append(pv)
                 ang_vel_list.append(av)
-                
+
                 # Compute orientations
                 if self.dimension >= 2:
                     cos_theta = jnp.cos(ang)
@@ -279,11 +308,13 @@ class ChiralMetamaterial(DynamicalSystem):
                     if self.dimension == 2:
                         orient = jnp.stack([cos_theta, sin_theta], axis=1)
                     else:
-                        orient = jnp.stack([cos_theta, sin_theta, jnp.zeros_like(ang)], axis=1)
+                        orient = jnp.stack(
+                            [cos_theta, sin_theta, jnp.zeros_like(ang)], axis=1
+                        )
                 else:
                     orient = ang[:, None]
                 orientations_list.append(orient)
-            
+
             positions = jnp.array(positions_list)
             angles = jnp.array(angles_list)
             pos_vel = jnp.array(pos_vel_list)
@@ -301,38 +332,51 @@ class ChiralMetamaterial(DynamicalSystem):
     def get_expected_state_shape(self) -> Tuple[int, ...]:
         """Get the expected shape of the state vector."""
         # State includes: positions (N*D) + angles (N) + position_velocities (N*D) + angular_velocities (N)
-        return (self.n_particles * self.dimension + self.n_particles + 
-                self.n_particles * self.dimension + self.n_particles,)
+        return (
+            self.n_particles * self.dimension
+            + self.n_particles
+            + self.n_particles * self.dimension
+            + self.n_particles,
+        )
 
-    def ravel_state(self, positions: jnp.ndarray, angles: jnp.ndarray, 
-                   pos_vel: jnp.ndarray, ang_vel: jnp.ndarray) -> jnp.ndarray:
+    def ravel_state(
+        self,
+        positions: jnp.ndarray,
+        angles: jnp.ndarray,
+        pos_vel: jnp.ndarray,
+        ang_vel: jnp.ndarray,
+    ) -> jnp.ndarray:
         """Ravel state components into a single state vector."""
-        return jnp.concatenate([
-            positions.ravel(),  # (N*D,)
-            angles.ravel(),     # (N,)
-            pos_vel.ravel(),    # (N*D,)
-            ang_vel.ravel(),    # (N,)
-        ])
+        return jnp.concatenate(
+            [
+                positions.ravel(),  # (N*D,)
+                angles.ravel(),  # (N,)
+                pos_vel.ravel(),  # (N*D,)
+                ang_vel.ravel(),  # (N,)
+            ]
+        )
 
-    def _unwrap_state(self, state: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def _unwrap_state(
+        self, state: jnp.ndarray
+    ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """
         Unwrap the state vector into its components.
-        
+
         Args:
             state: Flat state vector
-            
+
         Returns:
             Tuple of (positions, angles, position_velocities, angular_velocities)
         """
         N, D = self.n_particles, self.dimension
-        
+
         # Split state vector
         pos_size = N * D
         positions = state[:pos_size].reshape(N, D)
-        angles = state[pos_size:pos_size + N]
-        pos_vel = state[pos_size + N:pos_size + N + pos_size].reshape(N, D)
-        ang_vel = state[pos_size + N + pos_size:]
-        
+        angles = state[pos_size : pos_size + N]
+        pos_vel = state[pos_size + N : pos_size + N + pos_size].reshape(N, D)
+        ang_vel = state[pos_size + N + pos_size :]
+
         return positions, angles, pos_vel, ang_vel
 
     def get_graph_info(self) -> Dict[str, Any]:
@@ -357,29 +401,29 @@ class ChiralMetamaterial(DynamicalSystem):
         """
         if self.state is None or self.dt is None:
             raise ValueError("System not properly initialized")
-            
+
         # Compute derivatives
         derivatives = self.compute_derivatives(self.t, self.state)
-        
+
         # Simple Euler integration
         self.state = self.state + self.dt * derivatives
         self.t += self.dt
-        
+
         return self.state
 
     def simulate(self, steps: int):
         """
         Run simulation for a given number of steps.
-        
+
         Args:
             steps: Number of simulation steps
-            
+
         Returns:
             List of states at each timestep
         """
         if self.state is None:
             raise ValueError("System not properly initialized")
-            
+
         trajectory = []
         for _ in range(steps):
             trajectory.append(self.state.copy())
@@ -639,7 +683,7 @@ def animate_temporal_graph_test(
 
 if __name__ == "__main__":
     from ...config.schemas import DynamicsConfig
-    
+
     m = 8
     n = 8
     k = 8
@@ -650,17 +694,27 @@ if __name__ == "__main__":
         n_particles=0,  # Will be set by the system
         dimension=3,
         parameters={
-            "L": 1.0, "k_e": 1e4, "r": 0.2, "k_r": 1e6, 
-            "gamma": 1.0, "gamma_t": 0.1, "dt": 1e-3,
-            "grid_type": "3d", "grid_size": [m, n, k], 
-            "forcing": {"type": "velocity_constraint", "v_top_z": -0.25, "t_release": 20.0},
-            "seed": 42
+            "L": 1.0,
+            "k_e": 1e4,
+            "r": 0.2,
+            "k_r": 1e6,
+            "gamma": 1.0,
+            "gamma_t": 0.1,
+            "dt": 1e-3,
+            "grid_type": "3d",
+            "grid_size": [m, n, k],
+            "forcing": {
+                "type": "velocity_constraint",
+                "v_top_z": -0.25,
+                "t_release": 20.0,
+            },
+            "seed": 42,
         },
         initial_conditions={
-            "position_noise": 0.01, 
-            "angle_noise": 0.01, 
-            "velocity_noise": 0.01
-        }
+            "position_noise": 0.01,
+            "angle_noise": 0.01,
+            "velocity_noise": 0.01,
+        },
     )
     mat.initialize(config)
 
@@ -668,11 +722,11 @@ if __name__ == "__main__":
     t_f = 10.0
     steps = int(t_f / mat.dt)
     traj = mat.simulate(steps)
-    
+
     # sample every 10 steps
     traj_sampled = traj[::100]
     traj_array = jnp.array(traj_sampled)
-    
+
     # Extract positions and angles using the unwrap_state method
     unwrapped = mat.unwrap_state(traj_array)
     pos = np.array(unwrapped["positions"])

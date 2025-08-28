@@ -23,12 +23,12 @@ dynamics:
     grid_type: "3d"
     grid_size: [8, 8, 8]  # 8x8x8 grid
     
-    # Forcing/constraint parameters
-    forcing:
-      type: "velocity_constraint"  # Options: "velocity_constraint", "constant_rotation", null
-      v_top_z: -0.25              # z-velocity for top nodes (if velocity_constraint)
-      t_release: 20.0             # time when constraints are released
-      # rot_rate: 0.15            # rotation rate (if constant_rotation)
+    # Forcing/constraint parameters (commented out for diffrax compatibility)
+    # forcing:
+    #   type: "velocity_constraint"  # Options: "velocity_constraint", "constant_rotation", null
+    #   v_top_z: -0.25              # z-velocity for top nodes (if velocity_constraint)
+    #   t_release: 20.0             # time when constraints are released
+    #   # rot_rate: 0.15            # rotation rate (if constant_rotation)
     
     # Random seed for reproducibility
     seed: 42
